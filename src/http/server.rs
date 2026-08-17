@@ -20,10 +20,14 @@ pub struct AppState {
     pub site_url: Option<String>,
     /// 上游数据（nanoka.cc 角色/武器/声骸/套装名录）
     pub upstream: Arc<Upstream>,
+    /// 数据目录（db/config 与外置 index.html/tui-script.json 的来源）
+    pub web_dir: Arc<std::path::PathBuf>,
 }
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        // 工程文件原始上限 5MB，请求体放宽到 6MB（axum 默认仅 2MB）
+        .layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024))
         // ── Web 界面（内嵌单文件）──
         .route("/", get(handlers::index_page))
         // ── 公开接口（与原版一致）──
@@ -171,6 +175,7 @@ async fn local_root_middleware(
 /// 启动 HTTP 服务；每 5 分钟自动清理过期工程（对齐原版 pg_cron）
 pub async fn run_server(
     db_path: String,
+    app_dir: std::path::PathBuf,
     host: String,
     port: u16,
     site_url: Option<String>,
@@ -181,10 +186,14 @@ pub async fn run_server(
         db: Arc::new(Mutex::new(conn)),
         limiter: Arc::new(Mutex::new(RateLimiter::new(20, 60_000))),
         site_url,
+        web_dir: Arc::new(app_dir.clone()),
         upstream: Arc::new(Upstream::new(
             std::env::var("WUWA_AFYG_SHARE_WW_VERSION").ok(),
         )),
     };
+
+    // 首次运行：把默认 web 页面与 tui 脚本拷贝到数据目录（用户已存在则跳过）
+    let _ = crate::assets::ensure_defaults(&app_dir);
 
     // 启动时清理一次 + 定时清理
     {

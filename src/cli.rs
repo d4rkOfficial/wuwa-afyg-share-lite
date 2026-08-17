@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 use dialoguer::{Password, Select};
 use serde_json::{json, Value};
 
+use crate::assets;
 use crate::client::Client;
 use crate::config;
 use crate::core::format::{format_count, format_date, time_ago};
@@ -153,8 +154,20 @@ pub enum Command {
     },
     /// 写入示例数据（管理员）
     Demo,
-    /// 启动交互式 TUI
+    /// 启动交互式 TUI（由数据目录 tui-script.json 驱动）
     Tui,
+    /// 恢复默认 TUI 脚本 / Web 页面（内置模板写回数据目录）
+    ResetTemplates {
+        /// 数据库路径（决定数据目录；默认 ~/.wuwa-afyg-share-lite）
+        #[arg(long, env = "WUWA_AFYG_SHARE_DB")]
+        db: Option<PathBuf>,
+        /// 仅恢复 TUI 脚本
+        #[arg(long = "tui", conflicts_with = "web")]
+        tui_only: bool,
+        /// 仅恢复 Web 页面
+        #[arg(long = "web", conflicts_with = "tui")]
+        web_only: bool,
+    },
     /// 查看/修改本地配置
     Config {
         #[command(subcommand)]
@@ -428,20 +441,32 @@ pub fn run(cli: &Cli) -> Result<()> {
         Command::Cleanup => run_cleanup(cli),
         Command::Wipe { force } => run_wipe(cli, *force),
         Command::Demo => run_demo(cli),
-        Command::Tui => crate::tui::run(&make_client(cli)?),
+        Command::Tui => crate::tui::run(&make_client(cli)?, config::app_dir()),
+        Command::ResetTemplates { tui_only, web_only, db } => {
+            run_reset_templates(*tui_only, *web_only, db.as_ref())
+        }
         Command::Config { action } => run_config(action),
     }
 }
 
 fn run_serve(cli: &Cli, port: Option<u16>, host: Option<String>, db: Option<PathBuf>, site_url: Option<String>) -> Result<()> {
     let _ = cli;
-    let db_path = db
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| config::default_db_path().to_string_lossy().to_string());
+    let db_path = db.clone()
+        .unwrap_or_else(|| config::default_db_path());
     let host = host.unwrap_or_else(|| "0.0.0.0".to_string());
     let port = port.unwrap_or(3000);
+    // 数据目录：自定义 db 路径 → 取其 parent；否则用 config::app_dir()
+    let app_dir: PathBuf = db.as_ref()
+        .and_then(|p| p.parent().filter(|q| !q.as_os_str().is_empty()).map(|q| q.to_path_buf()))
+        .unwrap_or_else(|| config::app_dir());
     let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(crate::http::server::run_server(db_path, host, port, site_url))
+    runtime.block_on(crate::http::server::run_server(
+        db_path.to_string_lossy().to_string(),
+        app_dir,
+        host,
+        port,
+        site_url,
+    ))
 }
 
 fn run_register(cli: &Cli, username: &str, password: Option<&str>) -> Result<()> {
@@ -1504,6 +1529,15 @@ fn run_wipe(cli: &Cli, force: bool) -> Result<()> {
         get("meta")
     );
     println!("下次本机访问（CLI/TUI/Web）将自动重建 root_admin 账号");
+    // 随数据一起清除：外置的 TUI 脚本与 Web 页面（用户可再 `reset-templates` 恢复默认）
+    let dir = config::app_dir();
+    for f in [assets::web_file_path(&dir), assets::tui_script_file_path(&dir)] {
+        match assets::delete_asset(&f) {
+            Ok(Some(name)) => println!("  已删除外置文件 {}（用 lite reset-templates 恢复默认）", name),
+            Ok(None) => {}
+            Err(e) => println!("  删除 {} 失败：{}", f.display(), e),
+        }
+    }
     Ok(())
 }
 
@@ -1544,4 +1578,24 @@ fn run_config(action: &ConfigAction) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// 把内嵌默认模板（Web 页面 / TUI 脚本）写回数据目录，覆盖用户修改。`--tui` / `--web` 仅恢复某一项。
+fn run_reset_templates(tui_only: bool, web_only: bool, db: Option<&PathBuf>) -> Result<()> {
+    let dir = db
+        .and_then(|p| p.parent().filter(|q| !q.as_os_str().is_empty()).map(|q| q.to_path_buf()))
+        .unwrap_or_else(|| config::app_dir());
+    std::fs::create_dir_all(&dir)?;
+    let web = assets::web_file_path(&dir);
+    let script = assets::tui_script_file_path(&dir);
+    let restore_all = !tui_only && !web_only;
+    if web_only || restore_all {
+        assets::restore_default(&web, assets::DEFAULT_WEB)?;
+        println!("已恢复默认 Web 页面：{}", web.display());
+    }
+    if tui_only || restore_all {
+        assets::restore_default(&script, assets::DEFAULT_TUI_SCRIPT)?;
+        println!("已恢复默认 TUI 脚本：{}", script.display());
+    }
+    Ok(())
 }

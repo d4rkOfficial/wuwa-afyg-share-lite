@@ -1,0 +1,58 @@
+{
+  "title": "椰果工坊 Lite",
+  "author": "root_admin",
+  "description": "这是默认 TUI 脚本。菜单与动作都由本 JSON 定义：每个菜单项可执行 SQL，或调用本服务的 HTTP API，或执行一个外部子命令。字段里写 {变量名}（如 {code}）会在运行时提示你输入；输错或留空忽略可令该字段省略。上方 author 若非 root_admin 会要求登录后再执行动作。",
+  "menus": [
+    {
+      "label": "SQL 示例：查看工程数量",
+      "action": {
+        "type": "sql",
+        "sql": "SELECT COUNT(*) AS 工程数, COALESCE(SUM(view_count),0) AS 总浏览 FROM projects"
+      }
+    },
+    {
+      "label": "SQL 示例：查某分享码的工程",
+      "action": {
+        "type": "sql",
+        "sql": "SELECT title, author_name, code, created_at, clone_count FROM projects WHERE code = {分享码}",
+        "params": ["分享码"]
+      }
+    },
+    {
+      "label": "HTTP 示例：工程广场最新 10 条",
+      "action": {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/public/projects?perPage=10&sort=newest",
+        "echo": "广场工程"
+      }
+    },
+    {
+      "label": "HTTP 示例：搜索工程（输入关键词）",
+      "action": {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/public/projects?q={关键词}&perPage=10"
+      }
+    },
+    {
+      "label": "HTTP 示例：查某 Buff 实体（输入实体名）",
+      "action": {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/buff-sets?entity_name={实体名}"
+      }
+    },
+    {
+      "label": "命令示例：打开 Web 页面（用默认浏览器）",
+      "action": {
+        "type": "command",
+        "cmd": "start http://localhost:3000"
+      }
+    },
+    {
+      "label": "退出",
+      "exit": true
+    }
+  ]
+}

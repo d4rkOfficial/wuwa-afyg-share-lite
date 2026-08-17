@@ -160,11 +160,13 @@ const API = {
 };
 
 /* ═══════════════ 工具 ═══════════════ */
-/* 本机回环地址：服务端按 TCP 对端 IP 免登录，自动为根管理员 root_admin（一键登录） */
+/* IS_LOCAL 仅用于文案提示；登录状态一律以服务端判定为准（本机回环免登录 root_admin） */
 const IS_LOCAL = (() => {
   const h = (location.hostname || '').toLowerCase();
-  return h === 'localhost' || h === '::1' || h.startsWith('127.');
+  return h === 'localhost' || h === '::1' || h === '[::1]' || h.startsWith('127.');
 })();
+/* 当前用户（服务端 /api/auth/me 确认；本机自动为 root_admin；null = 未登录） */
+let ME = null;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const fmtCount = (n) => (n >= 10000 ? (n / 10000).toFixed(1) + 'w' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
@@ -256,6 +258,7 @@ class LiteHeader extends HTMLElement {
       this._user.querySelector('#me-logout').addEventListener('click', async () => {
         try { await API.post('/api/auth/logout'); } catch (e) { /* 忽略 */ }
         API.setToken(null);
+        ME = null;
         this.setUser(null);
         toast.show('已退出登录');
         window.VIEWS.mine && window.VIEWS.mine();
@@ -287,6 +290,7 @@ function openLogin() {
     try {
       const data = await API.post('/api/auth/' + mode, { username: u, password: p });
       API.setToken(data.token);
+      ME = data.user;
       loginModal().close();
       toast.show(mode === 'login' ? '登录成功' : '注册成功');
       refreshUser();
@@ -297,21 +301,30 @@ function openLogin() {
   loginModal().shadowRoot.querySelector('#register-btn').addEventListener('click', () => act('register'));
 }
 
+/**
+ * 刷新当前用户（登录状态以服务端判定为准）：
+ * 1) 先不带 token 探测 /api/auth/me —— 本机回环地址时服务端直接返回 root_admin（一键登录）
+ * 2) 401 则用本地 token 再试（远程已登录用户）
+ * 3) 都失败 → 未登录
+ */
 async function refreshUser() {
   const header = document.querySelector('lite-header');
-  if (IS_LOCAL) {
-    // 本机免登录：无需 token，服务端按回环 IP 自动以 root_admin 身份响应（一键登录）
-    try {
-      const data = await API.get('/api/auth/me');
-      header.setUser(data.user, true);
-    } catch (e) { header.setUser(null, true); }
+  const anon = await API.get('/api/auth/me').catch(() => null);
+  if (anon && anon.user) {
+    ME = anon.user;
+    header.setUser(ME, IS_LOCAL);
     return;
   }
-  if (!API.token) { header.setUser(null); return; }
-  try {
-    const data = await API.get('/api/auth/me');
-    header.setUser(data.user);
-  } catch (e) { header.setUser(null); }
+  if (API.token) {
+    const me = await API.get('/api/auth/me').catch(() => null);
+    if (me && me.user) {
+      ME = me.user;
+      header.setUser(ME, false);
+      return;
+    }
+  }
+  ME = null;
+  header.setUser(null);
 }
 
 /* ═══════════════ 广场 ═══════════════ */
@@ -396,12 +409,14 @@ async function openDetail(code) {
 }
 
 /* ═══════════════ 上传 ═══════════════ */
-function openUpload() {
+async function openUpload() {
+  // 确保用户状态已知（本机会自动探测为 root_admin）
+  if (!ME && (IS_LOCAL || API.token)) await refreshUser();
   const m = document.getElementById('upload-modal');
   // 本机免登录 root_admin 也按登录态上传（可填简介/标签/过期）
-  const logged = IS_LOCAL || !!API.token;
+  const logged = !!ME;
   m.open(
-    '<h3>' + (logged ? '上传工程（登录）' : '匿名分享（10 分钟有效）') + '</h3>' +
+    '<h3>' + (logged ? '上传工程（' + esc(ME.username) + '）' : '匿名分享（10 分钟有效）') + '</h3>' +
     '<div class="mt"><input type="file" id="up-file" accept=".json,application/json"></div>' +
     (logged ? '<div class="mt"><input id="up-desc" placeholder="简介（可留空）"></div>' +
       '<div class="mt"><input id="up-tags" placeholder="标签（逗号分隔，可留空）"></div>' +
@@ -442,8 +457,9 @@ document.getElementById('mine-upload').addEventListener('click', openUpload);
 /* ═══════════════ 我的工程 ═══════════════ */
 async function loadMine() {
   const list = document.getElementById('mine-list');
-  if (!IS_LOCAL && !API.token) {
-    list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程（本机打开则自动为 root_admin）。</div>';
+  // 快速提示：非本机且无 token 时直接告知登录（本机/已登录直接请求，服务端判定）
+  if (!ME && !API.token && !IS_LOCAL) {
+    list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程。</div>';
     return;
   }
   list.textContent = '加载中…';
@@ -488,7 +504,11 @@ async function loadMine() {
     }
   } catch (e) {
     list.textContent = '';
-    list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+    if ((e.message || '').indexOf('请先登录') >= 0) {
+      list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程。</div>';
+    } else {
+      list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+    }
   }
 }
 document.getElementById('mine-refresh').addEventListener('click', loadMine);

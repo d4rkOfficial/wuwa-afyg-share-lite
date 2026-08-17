@@ -153,7 +153,43 @@ lite buff delete character 今汐 新增益
 lite announcement create 标题 内容
 lite cleanup                         # 手动清理过期工程（服务器每 5 分钟自动执行）
 lite wipe [--force]                  # 清空全部本地数据（仅本机 localhost；二次确认，--force 跳过）
+lite reset-templates [--tui|--web]   # 恢复默认 TUI 脚本 / Web 页面（覆盖用户修改）
 ```
+
+### 可定制界面（TUI 脚本 + Web 页面）
+
+Web 页面（`index.html`）与 TUI 交互脚本（`tui-script.json`）**外置**在数据目录，缺省与数据库同一位置：
+
+- **默认数据目录**：`~/.wuwa-afyg-share-lite/`；若 `serve --db` / `tui --db` 指定了其它仓库，则在该仓库的 db 同级目录
+- 首次启动（`serve` 或 `tui`）自动从内置默认模板写入；**用户可直接编辑**这两个文件
+- `lite wipe` 会**一并清除**外置的 `index.html` 与 `tui-script.json`（下次访问自动重建默认）
+- `lite reset-templates [--tui|--web] [--db <仓库>]` 恢复默认模板（覆盖用户修改）
+
+**TUI 脚本是 JSON，可定义每个菜单项在选中的动作**——直连 SQLite 跑 SQL、调用本服务 HTTP API、或执行本机命令：
+
+```jsonc
+{
+  "title": "椰果工坊 Lite", "author": "root_admin",
+  "menus": [
+    { "label": "查看工程数", "action": { "type": "sql",
+        "sql": "SELECT COUNT(*) AS 工程数, SUM(view_count) AS 总浏览 FROM projects" } },
+    { "label": "按分享码查工程", "action": { "type": "sql",
+        "sql": "SELECT title, author_name, code FROM projects WHERE code = {分享码}",
+        "params": ["分享码"] } },
+    { "label": "广场最新", "action": { "type": "http",
+        "method": "GET", "path": "/api/public/projects?perPage=5" } },
+    { "label": "打开网页", "action": { "type": "command", "cmd": "start http://localhost:3000" } },
+    { "label": "退出", "exit": true }
+  ]
+}
+```
+
+- `action.type`：`sql` / `http` / `command`
+  - `sql` 直接对项目 SQLite 数据库执行（只读打开），结果以表格打印
+  - `http` 通过当前连接调用服务器（`method` + `path` + 可选 `body`）
+  - `command` 执行本机命令（仅限本机 localhost 连接）
+- `{占位名}` 或显式 `params` 里的变量，会在动作执行前提示输入，留空则忽略该占位
+- `author` 若非 `root_admin`，动作交由当前登录用户身份执行
 
 Buff 增益项（`--zone`）格式：`"zoneId=数值;ref=引用区;pct=比例;override"`，例如
 `--zone "atkPct=10;ref=totalAtk;pct=0.05;override"`；

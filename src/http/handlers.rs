@@ -133,11 +133,22 @@ pub async fn handle_options() -> Response {
     r
 }
 
-/// 内嵌 Web 界面首页（单文件原生 Web Components，零构建）
-pub async fn index_page() -> Response {
+/// 内嵌 Web 界面首页（默认从数据目录的 index.html 读取；首次运行自动写入默认模板）
+pub async fn index_page(State(state): State<AppState>) -> Response {
+    let html = match crate::assets::web_content(&state.web_dir) {
+        Ok(h) => h,
+        Err(e) => {
+            return text_res(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("读取 Web 页面失败：{}", e),
+                false,
+                vec![("Content-Type", "text/plain; charset=utf-8".to_string())],
+            );
+        }
+    };
     text_res(
         StatusCode::OK,
-        crate::web::INDEX_HTML.to_string(),
+        html,
         false,
         vec![("Content-Type", "text/html; charset=utf-8".to_string())],
     )
