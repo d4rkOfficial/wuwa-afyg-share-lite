@@ -24,6 +24,8 @@ pub struct AppState {
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        // ── Web 界面（内嵌单文件）──
+        .route("/", get(handlers::index_page))
         // ── 公开接口（与原版一致）──
         .route(
             "/api/public/projects",

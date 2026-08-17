@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>椰果工坊 Lite</title>
+<style>
+  /* 极简样式：无框架、无构建；所有用户内容渲染均使用 textContent / esc()，防 XSS */
+  :root {
+    --bg:#f4f5f7; --card:#fff; --line:#e2e4e8; --fg:#20242b; --muted:#68707c;
+    --accent:#2f6fed; --accent-text:#fff; --danger:#dc2626; --ok:#16a34a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:system-ui,-apple-system,"Microsoft YaHei","PingFang SC",sans-serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width:880px; margin:0 auto; padding:14px; }
+  .view[hidden] { display:none; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .muted { color:var(--muted); font-size:13px; }
+  button { cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--fg);
+           border-radius:8px; padding:6px 12px; font-size:14px; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-text); }
+  button.primary:hover { opacity:.9; color:var(--accent-text); }
+  button.danger { color:var(--danger); }
+  input, select, textarea { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:14px;
+                            font-family:inherit; background:var(--card); color:var(--fg); width:100%; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .mt { margin-top:10px; } .mb { margin-bottom:10px; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+  .toolbar input { flex:1; min-width:140px; }
+  h2 { font-size:17px; margin-bottom:10px; }
+  /* 工程卡片 */
+  .proj { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:8px; }
+  .proj h3 { font-size:15px; cursor:pointer; }
+  .proj h3:hover { color:var(--accent); }
+  .proj .meta { font-size:12px; color:var(--muted); margin-top:4px; }
+  .proj .code { font-family:ui-monospace,Consolas,monospace; background:#f0f1f3; border-radius:4px; padding:0 4px; }
+  .tag { display:inline-block; background:#eef1f6; border-radius:4px; padding:0 6px; font-size:12px; margin-right:4px; }
+  /* Buff / 名录 */
+  .group { margin-bottom:6px; }
+  .group summary { cursor:pointer; font-weight:600; }
+  .buff-item { padding:4px 0 4px 14px; font-size:14px; }
+  .kv { display:flex; gap:6px; padding:3px 0; font-size:14px; }
+  .kv b { min-width:64px; color:var(--muted); font-weight:500; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:13px; }
+  .pager { display:flex; gap:8px; justify-content:center; margin-top:10px; align-items:center; }
+  .ok { color:var(--ok); } .err { color:var(--danger); }
+</style>
+</head>
+<body>
+
+<lite-header></lite-header>
+
+<main class="wrap">
+  <!-- 工程广场 -->
+  <section id="view-browse" class="view">
+    <div class="toolbar">
+      <input id="browse-q" placeholder="搜索标题 / 作者…">
+      <select id="browse-sort">
+        <option value="newest">最新</option>
+        <option value="heat">最热</option>
+      </select>
+      <button id="browse-search" class="primary">搜索</button>
+    </div>
+    <div id="browse-list"></div>
+    <div class="pager">
+      <button id="browse-prev">上一页</button>
+      <span id="browse-page" class="muted"></span>
+      <button id="browse-next">下一页</button>
+    </div>
+  </section>
+
+  <!-- 我的工程 -->
+  <section id="view-mine" class="view" hidden>
+    <div class="row mb">
+      <h2 style="margin:0">我的工程</h2>
+      <span id="mine-stats" class="muted"></span>
+      <span style="flex:1"></span>
+      <button id="mine-upload">上传工程</button>
+      <button id="mine-refresh">刷新</button>
+    </div>
+    <div id="mine-list"></div>
+  </section>
+
+  <!-- Buff 集 -->
+  <section id="view-buff" class="view" hidden>
+    <div class="toolbar">
+      <select id="buff-type">
+        <option value="">全部类型</option>
+        <option value="character">角色</option>
+        <option value="weapon">武器</option>
+        <option value="echo">首位声骸</option>
+        <option value="1set">套装 1件</option>
+        <option value="2set">套装 2件</option>
+        <option value="3set">套装 3件</option>
+        <option value="4set">套装 4件</option>
+        <option value="5set">套装 5件</option>
+      </select>
+      <input id="buff-q" placeholder="搜索实体 / 增益名…">
+      <button id="buff-search" class="primary">查询</button>
+    </div>
+    <div id="buff-list"></div>
+  </section>
+
+  <!-- 上游名录 -->
+  <section id="view-catalog" class="view" hidden>
+    <div class="toolbar">
+      <select id="catalog-type">
+        <option value="characters">角色</option>
+        <option value="weapons">武器</option>
+        <option value="echoes">首位声骸</option>
+        <option value="sets">套装</option>
+      </select>
+      <input id="catalog-q" placeholder="搜索名称…">
+      <button id="catalog-search" class="primary">查询</button>
+    </div>
+    <div id="catalog-meta" class="muted mb"></div>
+    <div id="catalog-list"></div>
+  </section>
+
+  <!-- 公告 -->
+  <section id="view-announcements" class="view" hidden>
+    <div id="announce-list"></div>
+  </section>
+</main>
+
+<lite-modal id="login-modal"></lite-modal>
+<lite-modal id="upload-modal"></lite-modal>
+<lite-modal id="detail-modal"></lite-modal>
+
+<lite-toast></lite-toast>
+
+<script>
+'use strict';
+/* ═══════════════ 极简 API 客户端 ═══════════════ */
+const API = {
+  token: localStorage.getItem('lite-token') || null,
+  async req(method, path, body) {
+    const opt = { method, headers: {} };
+    if (this.token) opt.headers['Authorization'] = 'Bearer ' + this.token;
+    if (body !== undefined) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opt);
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { /* 非 JSON 响应（下载等） */ }
+    if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
+    return data;
+  },
+  get(path) { return this.req('GET', path); },
+  post(path, body) { return this.req('POST', path, body === undefined ? {} : body); },
+  patch(path, body) { return this.req('PATCH', path, body === undefined ? {} : body); },
+  put(path, body) { return this.req('PUT', path, body === undefined ? {} : body); },
+  del(path) { return this.req('DELETE', path); },
+  setToken(t) { this.token = t; if (t) localStorage.setItem('lite-token', t); else localStorage.removeItem('lite-token'); }
+};
+
+/* ═══════════════ 工具 ═══════════════ */
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fmtCount = (n) => (n >= 10000 ? (n / 10000).toFixed(1) + 'w' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const toast = {
+  show(msg, isErr) {
+    const t = document.querySelector('lite-toast');
+    t.show(msg, isErr);
+  }
+};
+
+/* ═══════════════ Web Components ═══════════════ */
+class LiteToast extends HTMLElement {
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = '<style>' +
+      ':host{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;display:none;}' +
+      '.t{background:#20242b;color:#fff;padding:8px 16px;border-radius:8px;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2);}' +
+      '.t.err{background:#dc2626;}' +
+      '</style><div class="t"></div>';
+  }
+  show(msg, isErr) {
+    const box = this.shadowRoot.querySelector('.t');
+    box.textContent = msg;
+    box.className = 't' + (isErr ? ' err' : '');
+    this.style.display = 'block';
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => { this.style.display = 'none'; }, 2600);
+  }
+}
+customElements.define('lite-toast', LiteToast);
+
+class LiteModal extends HTMLElement {
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = '<style>' +
+      ':host{position:fixed;inset:0;display:none;z-index:100;}' +
+      '.mask{position:absolute;inset:0;background:rgba(0,0,0,.35);}' +
+      '.box{position:relative;max-width:520px;margin:8vh auto;background:#fff;border-radius:12px;' +
+      'padding:16px 18px;box-shadow:0 8px 30px rgba(0,0,0,.25);max-height:80vh;overflow:auto;}' +
+      '.close{position:absolute;top:10px;right:12px;border:none;background:none;font-size:18px;cursor:pointer;color:#68707c;}' +
+      '</style><div class="mask"></div><div class="box"><button class="close">×</button><div class="body"></div></div>';
+    this.shadowRoot.querySelector('.mask').addEventListener('click', () => this.close());
+    this.shadowRoot.querySelector('.close').addEventListener('click', () => this.close());
+  }
+  open(html) { this.shadowRoot.querySelector('.body').innerHTML = html; this.style.display = 'block'; }
+  close() { this.style.display = 'none'; }
+}
+customElements.define('lite-modal', LiteModal);
+
+class LiteHeader extends HTMLElement {
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = '<style>' +
+      ':host{display:block;background:#fff;border-bottom:1px solid #e2e4e8;}' +
+      '.bar{max-width:880px;margin:0 auto;padding:10px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}' +
+      '.title{font-weight:700;font-size:16px;}' +
+      'nav{display:flex;gap:4px;flex-wrap:wrap;}' +
+      'nav button{border:none;background:none;font-size:14px;padding:6px 10px;border-radius:8px;cursor:pointer;color:#20242b;}' +
+      'nav button:hover{background:#f0f1f3;} nav button.active{background:#e8effd;color:#2f6fed;font-weight:600;}' +
+      '#user{flex:1;text-align:right;font-size:13px;color:#68707c;}' +
+      '</style>' +
+      '<div class="bar"><span class="title">椰果工坊 Lite</span>' +
+      '<nav><button data-v="browse" class="active">广场</button><button data-v="mine">我的工程</button>' +
+      '<button data-v="buff">Buff 集</button><button data-v="catalog">上游名录</button><button data-v="announcements">公告</button></nav>' +
+      '<span id="user"></span></div>';
+    this.shadowRoot.querySelectorAll('nav button').forEach((b) => {
+      b.addEventListener('click', () => {
+        this.shadowRoot.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
+        const v = b.dataset.v;
+        document.querySelectorAll('.view').forEach((s) => { s.hidden = s.id !== 'view-' + v; });
+        const fn = window.VIEWS[v];
+        fn && fn();
+      });
+    });
+    this._user = this.shadowRoot.getElementById('user');
+  }
+  setUser(u) {
+    if (u) {
+      this._user.innerHTML = esc(u.username) + (u.isAdmin ? '（管理员）' : '') + ' <button id="me-logout">退出</button>';
+      this._user.querySelector('#me-logout').addEventListener('click', async () => {
+        try { await API.post('/api/auth/logout'); } catch (e) { /* 忽略 */ }
+        API.setToken(null);
+        this.setUser(null);
+        toast.show('已退出登录');
+        window.VIEWS.mine && window.VIEWS.mine();
+      });
+    } else {
+      this._user.innerHTML = '<button id="me-login">登录 / 注册</button>';
+      this._user.querySelector('#me-login').addEventListener('click', () => openLogin());
+    }
+  }
+}
+customElements.define('lite-header', LiteHeader);
+
+/* ═══════════════ 登录 / 注册 ═══════════════ */
+const loginModal = () => document.getElementById('login-modal');
+function openLogin() {
+  loginModal().open(
+    '<h3>登录 / 注册</h3>' +
+    '<div class="mt"><input id="login-username" placeholder="用户名（2-20 字符）"></div>' +
+    '<div class="mt"><input id="login-password" type="password" placeholder="密码（至少 6 位）"></div>' +
+    '<div class="row mt"><button id="login-btn" class="primary">登录</button>' +
+    '<button id="register-btn">注册（首账号为管理员）</button></div>' +
+    '<div id="login-msg" class="muted mt"></div>'
+  );
+  const act = async (mode) => {
+    const u = loginModal().shadowRoot.querySelector('#login-username').value.trim();
+    const p = loginModal().shadowRoot.querySelector('#login-password').value;
+    const msg = loginModal().shadowRoot.querySelector('#login-msg');
+    msg.textContent = '…';
+    try {
+      const data = await API.post('/api/auth/' + mode, { username: u, password: p });
+      API.setToken(data.token);
+      loginModal().close();
+      toast.show(mode === 'login' ? '登录成功' : '注册成功');
+      refreshUser();
+      window.VIEWS.mine && window.VIEWS.mine();
+    } catch (e) { msg.textContent = e.message; }
+  };
+  loginModal().shadowRoot.querySelector('#login-btn').addEventListener('click', () => act('login'));
+  loginModal().shadowRoot.querySelector('#register-btn').addEventListener('click', () => act('register'));
+}
+
+async function refreshUser() {
+  const header = document.querySelector('lite-header');
+  if (!API.token) { header.setUser(null); return; }
+  try {
+    const data = await API.get('/api/auth/me');
+    header.setUser(data.user);
+  } catch (e) { header.setUser(null); }
+}
+
+/* ═══════════════ 广场 ═══════════════ */
+let browsePage = 1, browseSort = 'newest';
+async function loadBrowse() {
+  const list = document.getElementById('browse-list');
+  list.textContent = '加载中…';
+  try {
+    const q = document.getElementById('browse-q').value.trim();
+    const qs = new URLSearchParams({ page: browsePage, perPage: 12, sort: browseSort });
+    if (q) qs.set('q', q);
+    const data = await API.get('/api/public/projects?' + qs);
+    list.textContent = '';
+    const total = data.total || 0;
+    document.getElementById('browse-page').textContent =
+      '第 ' + data.page + ' 页 / 共 ' + Math.max(1, Math.ceil(total / 12)) + ' 页（' + total + ' 个）';
+    if (!data.projects.length) { list.innerHTML = '<div class="card muted">（暂无工程）</div>'; return; }
+    for (const p of data.projects) {
+      const names = (p.teamPreview && p.teamPreview.names || []).join('、');
+      const tags = (p.tags || []).map((t) => '<span class="tag">#' + esc(t) + '</span>').join('');
+      const card = el(
+        '<div class="proj"><h3></h3><div class="meta">作者：<span></span> ｜ ' +
+        '下载：<span></span> ｜ <span></span> ｜ 码：<span class="code"></span></div>' +
+        '<div class="meta"></div></div>'
+      );
+      card.querySelector('h3').textContent = p.title;
+      card.querySelector('h3').addEventListener('click', () => openDetail(p.code));
+      const meta = card.querySelectorAll('.meta');
+      meta[0].children[0].textContent = p.authorName;
+      meta[0].children[1].textContent = fmtCount(p.downloads);
+      meta[0].children[2].textContent = fmtDate(p.createdAt);
+      meta[0].children[3].textContent = p.code;
+      meta[1].innerHTML = (names ? '配队：' + esc(names) + ' ' : '') + tags;
+      list.appendChild(card);
+    }
+  } catch (e) { list.textContent = ''; list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>'; }
+}
+document.getElementById('browse-search').addEventListener('click', () => { browsePage = 1; loadBrowse(); });
+document.getElementById('browse-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { browsePage = 1; loadBrowse(); } });
+document.getElementById('browse-sort').addEventListener('change', (e) => { browseSort = e.target.value; browsePage = 1; loadBrowse(); });
+document.getElementById('browse-prev').addEventListener('click', () => { if (browsePage > 1) { browsePage--; loadBrowse(); } });
+document.getElementById('browse-next').addEventListener('click', () => { browsePage++; loadBrowse(); });
+
+/* ═══════════════ 详情 ═══════════════ */
+async function openDetail(code) {
+  const m = document.getElementById('detail-modal');
+  m.open('<h3>加载中…</h3>');
+  try {
+    const d = await API.get('/api/public/projects/' + encodeURIComponent(code));
+    const names = (d.teamNames || []).join('、');
+    const tags = (d.tags || []).map((t) => '<span class="tag">#' + esc(t) + '</span>').join('');
+    m.open(
+      '<h3></h3>' +
+      '<div class="kv"><b>作者</b><span></span></div>' +
+      '<div class="kv"><b>分享码</b><span></span></div>' +
+      '<div class="kv"><b>创建</b><span></span></div>' +
+      '<div class="kv"><b>浏览/下载</b><span></span></div>' +
+      '<div class="kv"><b>配队</b><span></span></div>' +
+      '<div class="kv"><b>到期</b><span></span></div>' +
+      '<div class="kv"><b>简介</b><span></span></div>' +
+      '<div class="meta mt"></div>' +
+      '<div class="row mt"><button class="primary" id="dl-btn">下载工程 JSON</button></div>'
+    );
+    const box = m.shadowRoot.querySelector('.body');
+    box.querySelector('h3').textContent = d.title;
+    const kvs = box.querySelectorAll('.kv span');
+    kvs[0].textContent = d.authorName;
+    kvs[1].textContent = d.code;
+    kvs[2].textContent = fmtDate(d.createdAt);
+    kvs[3].textContent = fmtCount(d.views) + ' / ' + fmtCount(d.downloads);
+    kvs[4].textContent = names;
+    kvs[5].textContent = d.expiresAt || '永久';
+    kvs[6].textContent = d.description || '（无）';
+    box.querySelector('.meta').innerHTML = tags;
+    box.querySelector('#dl-btn').addEventListener('click', () => {
+      window.location.href = '/share/' + encodeURIComponent(code) + '/download';
+    });
+  } catch (e) {
+    m.open('<h3>加载失败</h3><div class="err mt"></div>');
+    m.shadowRoot.querySelector('.err').textContent = e.message;
+  }
+}
+
+/* ═══════════════ 上传 ═══════════════ */
+function openUpload() {
+  const m = document.getElementById('upload-modal');
+  const logged = !!API.token;
+  m.open(
+    '<h3>' + (logged ? '上传工程（登录）' : '匿名分享（10 分钟有效）') + '</h3>' +
+    '<div class="mt"><input type="file" id="up-file" accept=".json,application/json"></div>' +
+    (logged ? '<div class="mt"><input id="up-desc" placeholder="简介（可留空）"></div>' +
+      '<div class="mt"><input id="up-tags" placeholder="标签（逗号分隔，可留空）"></div>' +
+      '<div class="mt"><input id="up-days" type="number" min="1" placeholder="过期天数（留空 = 永久）"></div>' : '') +
+    '<div class="row mt"><button id="up-btn" class="primary">上传</button></div>' +
+    '<div id="up-msg" class="muted mt"></div>'
+  );
+  const box = m.shadowRoot.querySelector('.body');
+  box.querySelector('#up-btn').addEventListener('click', async () => {
+    const file = box.querySelector('#up-file').files[0];
+    const msg = box.querySelector('#up-msg');
+    if (!file) { msg.textContent = '请选择工程 JSON 文件'; return; }
+    msg.textContent = '上传中…';
+    try {
+      const fileText = await file.text();
+      let code;
+      if (logged) {
+        const data = await API.post('/api/me/projects', {
+          fileText,
+          description: box.querySelector('#up-desc').value,
+          tags: box.querySelector('#up-tags').value.split(',').map((s) => s.trim()).filter(Boolean),
+          expiresDays: box.querySelector('#up-days').value ? Number(box.querySelector('#up-days').value) : null
+        });
+        code = data.code;
+      } else {
+        const data = await API.post('/api/public/projects', { fileText });
+        code = data.code;
+      }
+      m.close();
+      toast.show('分享成功：' + code);
+      if (document.getElementById('view-browse').hidden === false) loadBrowse();
+      else if (logged) loadMine();
+    } catch (e) { msg.textContent = e.message; }
+  });
+}
+document.getElementById('mine-upload').addEventListener('click', openUpload);
+
+/* ═══════════════ 我的工程 ═══════════════ */
+async function loadMine() {
+  const list = document.getElementById('mine-list');
+  if (!API.token) {
+    list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程。</div>';
+    return;
+  }
+  list.textContent = '加载中…';
+  try {
+    const data = await API.get('/api/me');
+    const s = data.stats;
+    document.getElementById('mine-stats').textContent =
+      '共 ' + s.projects + ' 个 ｜ 已过期 ' + s.expiredCount + ' ｜ 浏览 ' + s.totalViews + ' ｜ 克隆 ' + s.totalClones;
+    list.textContent = '';
+    if (!data.projects.length) { list.innerHTML = '<div class="card muted">（还没有上传过工程）</div>'; return; }
+    for (const p of data.projects) {
+      const card = el(
+        '<div class="proj"><div class="row"><h3 style="cursor:default"></h3>' +
+        '<span class="muted code"></span><span class="muted"></span><span style="flex:1"></span>' +
+        '<button class="m-act">发布/隐藏</button><button class="m-act">设过期</button>' +
+        '<button class="m-act">详情</button><button class="m-act danger">删除</button></div></div>'
+      );
+      card.querySelector('h3').textContent = p.title;
+      card.querySelector('.code').textContent = p.code;
+      const st = card.querySelectorAll('.muted')[1];
+      st.textContent = (p.published ? '' : '已隐藏 ') + (p.protected ? '已保护 ' : '') +
+        '下载 ' + fmtCount(p.clone_count) + ' ｜ ' + fmtDate(p.created_at);
+      const btns = card.querySelectorAll('.m-act');
+      btns[0].addEventListener('click', async () => {
+        try { await API.post('/api/me/projects/' + p.id + '/toggle-publish'); toast.show('已切换'); loadMine(); }
+        catch (e) { toast.show(e.message, true); }
+      });
+      btns[1].addEventListener('click', async () => {
+        const days = prompt('过期天数（留空 = 永久）');
+        if (days === null) return;
+        const expiresAt = days.trim() === '' ? null : new Date(Date.now() + Number(days) * 86400000).toISOString();
+        try { await API.put('/api/me/projects/' + p.id + '/expiry', { expiresAt }); toast.show('已设置'); loadMine(); }
+        catch (e) { toast.show(e.message, true); }
+      });
+      btns[2].addEventListener('click', () => openDetail(p.code));
+      btns[3].addEventListener('click', async () => {
+        if (!confirm('确认删除该工程？此操作不可恢复')) return;
+        try { await API.del('/api/me/projects/' + p.id); toast.show('已删除'); loadMine(); }
+        catch (e) { toast.show(e.message, true); }
+      });
+      list.appendChild(card);
+    }
+  } catch (e) {
+    list.textContent = '';
+    list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+  }
+}
+document.getElementById('mine-refresh').addEventListener('click', loadMine);
+
+/* ═══════════════ Buff 集 ═══════════════ */
+async function loadBuff() {
+  const list = document.getElementById('buff-list');
+  list.textContent = '加载中…';
+  try {
+    const type = document.getElementById('buff-type').value;
+    const q = document.getElementById('buff-q').value.trim();
+    const qs = new URLSearchParams();
+    if (type) qs.set('entity_type', type);
+    if (q) qs.set('q', q);
+    const data = await API.get('/api/buff-sets?' + qs);
+    list.textContent = '';
+    if (!data.buffSets.length) { list.innerHTML = '<div class="card muted">（无匹配条目）</div>'; return; }
+    let cur = '';
+    const wrap = document.createElement('div');
+    for (const r of data.buffSets) {
+      const key = r.entity_type + '｜' + r.entity_name;
+      if (key !== cur) {
+        cur = key;
+        const g = el('<details class="group" open><summary></summary></details>');
+        g.querySelector('summary').textContent = key;
+        wrap.appendChild(g);
+      }
+      const g = wrap.lastElementChild;
+      const line = el('<div class="buff-item"><b style="cursor:pointer"></b><span class="muted"></span></div>');
+      const nameEl = line.querySelector('b');
+      nameEl.textContent = r.buff_name;
+      const zones = (r.buff_set || []).map((z) => z.zoneId + '=' + z.value).join('，');
+      const cond = r.condition ? JSON.stringify(r.condition) : '';
+      line.querySelector('.muted').textContent = 'scope=' + r.scope + (cond ? ' 条件=' + cond : '') + ' ｜ ' + zones;
+      nameEl.addEventListener('click', () => {
+        if (g.open) g.open = false; else g.open = true;
+      });
+      g.appendChild(line);
+    }
+    list.appendChild(wrap);
+  } catch (e) {
+    list.textContent = '';
+    list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+  }
+}
+document.getElementById('buff-search').addEventListener('click', loadBuff);
+document.getElementById('buff-type').addEventListener('change', loadBuff);
+
+/* ═══════════════ 上游名录 ═══════════════ */
+async function loadCatalog() {
+  const list = document.getElementById('catalog-list');
+  list.textContent = '加载中…';
+  try {
+    const type = document.getElementById('catalog-type').value;
+    const q = document.getElementById('catalog-q').value.trim().toLowerCase();
+    const data = await API.get('/api/catalog/' + type);
+    document.getElementById('catalog-meta').textContent =
+      'ww ' + data.version + (data.stale ? '（本地缓存）' : '');
+    const items = (data[type] || []).filter((i) => !q || i.name.toLowerCase().includes(q));
+    list.textContent = '';
+    if (!items.length) { list.innerHTML = '<div class="card muted">（无匹配条目）</div>'; return; }
+    const fmt = {
+      characters: (i) => i.name + '（' + i.star + '星 ' + i.element + ' ' + i.weaponType + '）',
+      weapons: (i) => i.name + '（' + i.star + '星 ' + i.weaponType + '）',
+      echoes: (i) => i.name + '（Cost ' + i.cost + '）' + (i.sets && i.sets.length ? '【' + i.sets.join('/') + '】' : ''),
+      sets: (i) => i.name + '（' + (i.pieces || []).join('/') + '件套）'
+    }[type];
+    const wrap = document.createElement('div');
+    for (const i of items) {
+      const line = el('<div class="buff-item"></div>');
+      line.textContent = fmt(i);
+      wrap.appendChild(line);
+    }
+    list.appendChild(wrap);
+    document.getElementById('catalog-meta').textContent += ' ｜ 共 ' + items.length + ' 条';
+  } catch (e) {
+    list.textContent = '';
+    list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+  }
+}
+document.getElementById('catalog-search').addEventListener('click', loadCatalog);
+document.getElementById('catalog-type').addEventListener('change', loadCatalog);
+
+/* ═══════════════ 公告 ═══════════════ */
+async function loadAnnouncements() {
+  const list = document.getElementById('announce-list');
+  list.textContent = '加载中…';
+  try {
+    const data = await API.get('/api/announcements');
+    list.textContent = '';
+    if (!data.announcements.length) { list.innerHTML = '<div class="card muted">（暂无公告）</div>'; return; }
+    for (const a of data.announcements) {
+      const card = el('<div class="card mb"><h2 style="margin:0"></h2><p class="mt"></p><div class="muted mt"></div></div>');
+      card.querySelector('h2').textContent = a.title;
+      card.querySelector('p').textContent = a.content;
+      card.querySelector('.muted').textContent = a.createdAt;
+      list.appendChild(card);
+    }
+  } catch (e) {
+    list.textContent = '';
+    list.innerHTML = '<div class="card err">' + esc(e.message) + '</div>';
+  }
+}
+
+/* ═══════════════ 视图分发 ═══════════════ */
+window.VIEWS = {
+  browse: loadBrowse,
+  mine: loadMine,
+  buff: loadBuff,
+  catalog: loadCatalog,
+  announcements: loadAnnouncements
+};
+
+/* ═══════════════ 启动 ═══════════════ */
+refreshUser();
+loadBrowse();
+</script>
+</body>
+</html>

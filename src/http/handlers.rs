@@ -133,6 +133,16 @@ pub async fn handle_options() -> Response {
     r
 }
 
+/// 内嵌 Web 界面首页（单文件原生 Web Components，零构建）
+pub async fn index_page() -> Response {
+    text_res(
+        StatusCode::OK,
+        crate::web::INDEX_HTML.to_string(),
+        false,
+        vec![("Content-Type", "text/html; charset=utf-8".to_string())],
+    )
+}
+
 pub async fn not_found() -> Response {
     json_res_no_cors(StatusCode::NOT_FOUND, json!({ "error": "未找到该接口" }))
 }

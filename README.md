@@ -1,9 +1,9 @@
 # 椰果工坊 · WUWA-AFYG-SHARE-LITE
 
 《鸣潮》工程分享平台（SQLite 版）——配合 [椰果工具箱](https://wuwa-afyg-tool.200503.xyz/) 使用。
-只有 **TUI / CLI 界面**，数据存在本地 SQLite 文件里，HTTP API 与线上版 wuwa-afyg-share 完全一致（不含 AI 工具与 bilibili-toy 功能）。
+有 **TUI / CLI / 极简 Web** 三种界面，数据存在本地 SQLite 文件里，HTTP API 与线上版 wuwa-afyg-share 完全一致（不含 AI 工具与 bilibili-toy 功能）。
 
-**一句话：启动服务器 → 打开 TUI（或敲 CLI 命令）→ 上传/浏览/分享工程、管理 Buff 集。**
+**一句话：启动服务器 → 浏览器打开或敲命令 → 上传/浏览/分享工程、管理 Buff 集。**
 
 ---
 
@@ -39,6 +39,19 @@ lite --help     # 查看全部命令
 
 > **本机免登录**：从 localhost 连接时不需要注册/登录，自动以根管理员 `root_admin` 身份操作。
 > 局域网/远程访问才需要账号（见第五节）。
+
+### 4. Web 界面（浏览器）
+
+服务器启动后，**浏览器直接打开 http://localhost:3000** 即可使用：
+
+- 工程广场（搜索 / 最新·最热排序 / 分页）、分享详情、下载 JSON
+- 匿名分享与登录后上传（登录后还可填简介、标签、过期天数）
+- 我的工程（发布/隐藏、设过期、删除）
+- Buff 集浏览、上游名录（角色/武器/首位声骸/套装，来自 nanoka.cc）、公告
+- 登录 / 注册（右上角；本机打开即 root_admin，远程需登录）
+
+实现为**单文件原生 Web Components**（`<lite-header>`/`<lite-modal>`/`<lite-toast>` 等），
+无框架、无 Tailwind、无构建步骤，直接调用本服务 HTTP API，内嵌在可执行文件里。
 
 ---
 
@@ -212,7 +225,7 @@ lite config get             # 查看配置（server/token/数据库路径）
 
 | 项 | 原版 | 本版 |
 | ---- | ---- | ---- |
-| 界面 | Next.js Web | 仅 TUI / CLI |
+| 界面 | Next.js Web | TUI / CLI + 单文件原生 Web（Web Components，零构建） |
 | 数据库 | Supabase（Postgres + RLS + Auth + pg_cron） | SQLite 单文件（RLS→服务层校验，pg_cron→定时任务，Auth→本地账号） |
 | 登录 | GitHub / 邮箱魔法链接 | 用户名+密码；本机 localhost 免登录直接为 root_admin |
 | AI 工具 / bilibili-toy | 有 | ❌ 移除 |

@@ -13,6 +13,7 @@ mod service;
 mod tui;
 mod types;
 mod upstream;
+mod web;
 
 use clap::Parser;
 
