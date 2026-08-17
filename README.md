@@ -3,15 +3,15 @@
 《鸣潮》工程分享平台（SQLite 版）——配合 [椰果工具箱](https://wuwa-afyg-tool.200503.xyz/) 使用。
 有 **TUI / CLI / 极简 Web** 三种界面，数据存在本地 SQLite 文件里，HTTP API 与线上版 wuwa-afyg-share 完全一致（不含 AI 工具与 bilibili-toy 功能）。
 
-**一句话：启动服务器 → 浏览器打开或敲命令 → 上传/浏览/分享工程、管理 Buff 集。**
+快速跳转：[椰果工坊 原仓库](https://github.com/d4rkOfficial/wuwa-afyg-share)
 
 ---
 
-## 一、安装与启动（约 2 分钟）
+## 一、快速开始
 
-### 1. 构建
+### 1. 构建（使用 release 可跳过）
 
-需要安装 [Rust](https://www.rust-lang.org/tools/install)（MSVC 工具链），然后：
+需要安装 [Rust](https://www.rust-lang.org/tools/install)，然后：
 
 ```bash
 cd wuwa-afyg-share-lite
@@ -282,5 +282,3 @@ lite config get             # 查看配置（server/token/数据库路径）
 
 业务规则与原版对齐：匿名分享 10 分钟有效、非匿名过期一周宽限、保护工程豁免删除与清理、
 分享码 8 位、标题 60 / 简介 500 字符截断、快照根+版本链（差异现算）、管理员权限链连坐收回等。
-
-技术栈一句话：Rust + rusqlite(bundled) + axum + clap + dialoguer + brotli，零外部运行时依赖。
