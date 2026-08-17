@@ -12,6 +12,7 @@ mod repo;
 mod service;
 mod tui;
 mod types;
+mod upstream;
 
 use clap::Parser;
 

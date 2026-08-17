@@ -10,6 +10,7 @@ use crate::db::open_db;
 use crate::http::handlers;
 use crate::http::rate_limit::RateLimiter;
 use crate::repo;
+use crate::upstream::Upstream;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,6 +18,8 @@ pub struct AppState {
     pub limiter: Arc<Mutex<RateLimiter>>,
     /// 分享链接前缀（POST /api/public/projects 返回的 url 字段）
     pub site_url: Option<String>,
+    /// 上游数据（nanoka.cc 角色/武器/声骸/套装名录）
+    pub upstream: Arc<Upstream>,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -37,6 +40,15 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::buff_sets_get).options(handlers::handle_options),
         )
         .route("/api/buff-sets/export", get(handlers::buff_sets_export))
+        // ── 上游名录（nanoka.cc；扩展公开接口）──
+        .route(
+            "/api/catalog",
+            get(handlers::catalog_get).options(handlers::handle_options),
+        )
+        .route(
+            "/api/catalog/{entity_type}",
+            get(handlers::catalog_type_get).options(handlers::handle_options),
+        )
         .route(
             "/share/{code}/download",
             get(handlers::share_download).options(handlers::handle_options),
@@ -166,6 +178,9 @@ pub async fn run_server(
         db: Arc::new(Mutex::new(conn)),
         limiter: Arc::new(Mutex::new(RateLimiter::new(20, 60_000))),
         site_url,
+        upstream: Arc::new(Upstream::new(
+            std::env::var("WUWA_AFYG_SHARE_WW_VERSION").ok(),
+        )),
     };
 
     // 启动时清理一次 + 定时清理
@@ -193,6 +208,7 @@ pub async fn run_server(
         println!("  站点前缀：{}", su);
     }
     println!("  公开接口：GET/POST /api/public/projects、GET /api/buff-sets、GET /api/buff-sets/export、GET /share/<code>/download");
+    println!("  上游名录：GET /api/catalog（nanoka.cc 角色/武器/声骸/套装）");
     println!("按 Ctrl+C 停止");
 
     axum::serve(

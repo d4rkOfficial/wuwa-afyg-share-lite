@@ -138,6 +138,11 @@ pub enum Command {
         #[command(subcommand)]
         action: AnnouncementAction,
     },
+    /// 上游名录（nanoka.cc 角色/武器/声骸/套装，公开）
+    Catalog {
+        #[command(subcommand)]
+        action: CatalogAction,
+    },
     /// 手动清理过期工程（管理员）
     Cleanup,
     /// 写入示例数据（管理员）
@@ -302,6 +307,20 @@ pub enum ConfigAction {
     Set { key: String, value: String },
 }
 
+#[derive(Subcommand)]
+pub enum CatalogAction {
+    /// 列出名录（--type characters/weapons/echoes/sets，缺省全部）
+    List {
+        #[arg(long = "type")]
+        entity_type: Option<String>,
+        /// 按名称搜索
+        #[arg(long)]
+        q: Option<String>,
+    },
+    /// 查看上游版本与条目统计
+    Version,
+}
+
 // ── 实现 ────────────────────────────────────────────────
 
 fn make_client(cli: &Cli) -> Result<Client> {
@@ -396,6 +415,7 @@ pub fn run(cli: &Cli) -> Result<()> {
         Command::Buff { action } => run_buff(cli, action),
         Command::Snapshot { action } => run_snapshot(cli, action),
         Command::Announcement { action } => run_announcement(cli, action),
+        Command::Catalog { action } => run_catalog(cli, action),
         Command::Cleanup => run_cleanup(cli),
         Command::Demo => run_demo(cli),
         Command::Tui => crate::tui::run(&make_client(cli)?),
@@ -1278,6 +1298,149 @@ fn run_announcement(cli: &Cli, action: &AnnouncementAction) -> Result<()> {
             let resp = client.delete(&format!("/api/admin/announcements/{}", id))?;
             resp.ok_void()?;
             println!("公告已删除");
+            Ok(())
+        }
+    }
+}
+
+fn run_catalog(cli: &Cli, action: &CatalogAction) -> Result<()> {
+    let client = make_client(cli)?;
+    match action {
+        CatalogAction::List { entity_type, q } => {
+            let path = match entity_type.as_deref() {
+                Some(t) if t == "characters" || t == "weapons" || t == "echoes" || t == "sets" => {
+                    format!("/api/catalog/{}", t)
+                }
+                Some(t) => bail!("无效的名录类型：{}（characters/weapons/echoes/sets）", t),
+                None => "/api/catalog".to_string(),
+            };
+            let resp = client.get(&path, &[])?;
+            let v = resp.ok_json()?;
+            if maybe_json(cli, v.clone()) {
+                return Ok(());
+            }
+            let version = v.get("version").and_then(|x| x.as_str()).unwrap_or("?");
+            let source = v.get("source").and_then(|x| x.as_str()).unwrap_or("");
+            let stale = v.get("stale").and_then(|x| x.as_bool()).unwrap_or(false);
+            println!(
+                "上游：{}（ww {}）{}",
+                source,
+                version,
+                if stale { "【本地缓存】" } else { "" }
+            );
+            let q_filter = q.as_deref().map(|s| s.to_lowercase());
+            let print_items = |key: &str, label: &str, fmt: &dyn Fn(&Value) -> String| {
+                let Some(items) = v.get(key).and_then(|x| x.as_array()) else {
+                    return;
+                };
+                let mut shown = 0;
+                for item in items {
+                    let name = item.get("name").and_then(|x| x.as_str()).unwrap_or("");
+                    if let Some(qf) = &q_filter {
+                        if !name.to_lowercase().contains(qf) {
+                            continue;
+                        }
+                    }
+                    println!("  {} {}", label, fmt(item));
+                    shown += 1;
+                }
+                println!("  —— {} 共 {} 条（显示 {}）——", label, items.len(), shown);
+            };
+            print_items(
+                "characters",
+                "角色：",
+                &|i| {
+                    format!(
+                        "{}（{}星 {} {}）",
+                        i.get("name").and_then(|x| x.as_str()).unwrap_or(""),
+                        i.get("star").and_then(|x| x.as_i64()).unwrap_or(0),
+                        i.get("element").and_then(|x| x.as_str()).unwrap_or(""),
+                        i.get("weaponType").and_then(|x| x.as_str()).unwrap_or("")
+                    )
+                },
+            );
+            print_items(
+                "weapons",
+                "武器：",
+                &|i| {
+                    format!(
+                        "{}（{}星 {}）",
+                        i.get("name").and_then(|x| x.as_str()).unwrap_or(""),
+                        i.get("star").and_then(|x| x.as_i64()).unwrap_or(0),
+                        i.get("weaponType").and_then(|x| x.as_str()).unwrap_or("")
+                    )
+                },
+            );
+            print_items(
+                "echoes",
+                "声骸：",
+                &|i| {
+                    let sets = i
+                        .get("sets")
+                        .and_then(|x| x.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|s| s.as_str().map(|x| x.to_string()))
+                                .collect::<Vec<_>>()
+                                .join("/")
+                        })
+                        .unwrap_or_default();
+                    format!(
+                        "{}（Cost {}）{}",
+                        i.get("name").and_then(|x| x.as_str()).unwrap_or(""),
+                        i.get("cost").and_then(|x| x.as_i64()).unwrap_or(0),
+                        if sets.is_empty() { String::new() } else { format!("【{}】", sets) }
+                    )
+                },
+            );
+            print_items(
+                "sets",
+                "套装：",
+                &|i| {
+                    let pieces = i
+                        .get("pieces")
+                        .and_then(|x| x.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|p| p.as_i64().map(|v| v.to_string()))
+                                .collect::<Vec<_>>()
+                                .join("/")
+                        })
+                        .unwrap_or_default();
+                    format!(
+                        "{}（{}件套）",
+                        i.get("name").and_then(|x| x.as_str()).unwrap_or(""),
+                        pieces
+                    )
+                },
+            );
+            Ok(())
+        }
+        CatalogAction::Version => {
+            let resp = client.get("/api/catalog", &[])?;
+            let v = resp.ok_json()?;
+            if maybe_json(cli, v.clone()) {
+                return Ok(());
+            }
+            println!(
+                "上游版本：ww {}（{}）{}",
+                v.get("version").and_then(|x| x.as_str()).unwrap_or("?"),
+                v.get("source").and_then(|x| x.as_str()).unwrap_or(""),
+                if v.get("stale").and_then(|x| x.as_bool()).unwrap_or(false) {
+                    "【本地缓存】"
+                } else {
+                    ""
+                }
+            );
+            if let Some(counts) = v.get("counts") {
+                println!(
+                    "条目：角色 {} ｜ 武器 {} ｜ 声骸 {} ｜ 套装 {}",
+                    counts.get("characters").and_then(|x| x.as_i64()).unwrap_or(0),
+                    counts.get("weapons").and_then(|x| x.as_i64()).unwrap_or(0),
+                    counts.get("echoes").and_then(|x| x.as_i64()).unwrap_or(0),
+                    counts.get("sets").and_then(|x| x.as_i64()).unwrap_or(0),
+                );
+            }
             Ok(())
         }
     }

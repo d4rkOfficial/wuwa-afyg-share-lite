@@ -357,7 +357,23 @@ const ENTITY_TYPES: [&str; 9] = ["全部", "character", "weapon", "echo", "1set"
 
 fn buff_menu(client: &Client) -> Result<()> {
     loop {
-        let sel = select("Buff 集", &ENTITY_TYPES.map(|s| s.to_string()), 0)?;
+        let items = [
+            "📦 Buff 集数据".to_string(),
+            "🌐 上游名录（nanoka.cc）".to_string(),
+            "🔙 返回".to_string(),
+        ];
+        let sel = select("Buff 集", &items, 0)?;
+        match sel {
+            0 => buff_data_menu(client)?,
+            1 => catalog_menu(client)?,
+            _ => return Ok(()),
+        }
+    }
+}
+
+fn buff_data_menu(client: &Client) -> Result<()> {
+    loop {
+        let sel = select("Buff 集数据", &ENTITY_TYPES.map(|s| s.to_string()), 0)?;
         if sel == 0 {
             buff_entity_list(client, None)?;
         } else if sel < ENTITY_TYPES.len() {
@@ -365,6 +381,132 @@ fn buff_menu(client: &Client) -> Result<()> {
         } else {
             return Ok(());
         }
+    }
+}
+
+/// 上游名录浏览（角色/武器/首位声骸/套装，来自 nanoka.cc）
+fn catalog_menu(client: &Client) -> Result<()> {
+    const TYPES: [&str; 4] = ["characters", "weapons", "echoes", "sets"];
+    const LABELS: [&str; 4] = ["角色", "武器", "首位声骸", "套装"];
+    loop {
+        let mut type_items: Vec<String> = LABELS.iter().map(|l| l.to_string()).collect();
+        type_items.push("🔙 返回".to_string());
+        let sel = select("上游名录", &type_items, 0)?;
+        if sel >= TYPES.len() {
+            return Ok(());
+        }
+        let t = TYPES[sel];
+        let q = input::<String>(
+            &format!("搜索{}名称（留空 = 全部）", LABELS[sel]),
+            Some(String::new()),
+        )?;
+        let resp = client.get(&format!("/api/catalog/{}", t), &[])?;
+        let v = match resp.ok_json() {
+            Ok(v) => v,
+            Err(e) => {
+                println!("获取失败：{}", e);
+                wait_enter()?;
+                continue;
+            }
+        };
+        let items_arr = v.get(t).and_then(|x| x.as_array()).cloned().unwrap_or_default();
+        let ql = q.trim().to_lowercase();
+        let filtered: Vec<Value> = items_arr
+            .into_iter()
+            .filter(|i| {
+                let name = i.get("name").and_then(|x| x.as_str()).unwrap_or("");
+                ql.is_empty() || name.to_lowercase().contains(&ql)
+            })
+            .collect();
+        if filtered.is_empty() {
+            println!("（无匹配条目）");
+            wait_enter()?;
+            continue;
+        }
+        let mut menu: Vec<String> = filtered.iter().map(|i| catalog_item_label(t, i)).collect();
+        menu.push("🔙 返回".to_string());
+        let sel2 = select(
+            &format!("{}名录（{} 条，ww {}）", LABELS[sel], filtered.len(), v.get("version").and_then(|x| x.as_str()).unwrap_or("?")),
+            &menu,
+            0,
+        )?;
+        if sel2 == menu.len() - 1 {
+            continue;
+        }
+        let item = &filtered[sel2];
+        println!("────────────────────────────");
+        println!("{}", catalog_item_label(t, item));
+        if t == "echoes" {
+            if let Some(sets) = item.get("sets").and_then(|x| x.as_array()) {
+                let names: Vec<&str> = sets.iter().filter_map(|s| s.as_str()).collect();
+                if !names.is_empty() {
+                    println!("所属套装：{}", names.join("、"));
+                }
+            }
+        }
+        if t == "sets" {
+            if let Some(pieces) = item.get("pieces").and_then(|x| x.as_array()) {
+                let ps: Vec<String> = pieces
+                    .iter()
+                    .filter_map(|p| p.as_i64().map(|v| v.to_string()))
+                    .collect();
+                if !ps.is_empty() {
+                    println!("套装件数：{}", ps.join("/"));
+                }
+            }
+        }
+        println!("────────────────────────────");
+        wait_enter()?;
+    }
+}
+
+fn catalog_item_label(t: &str, i: &Value) -> String {
+    let name = i.get("name").and_then(|x| x.as_str()).unwrap_or("");
+    match t {
+        "characters" => format!(
+            "{}（{}星 {} {}）",
+            name,
+            i.get("star").and_then(|x| x.as_i64()).unwrap_or(0),
+            i.get("element").and_then(|x| x.as_str()).unwrap_or(""),
+            i.get("weaponType").and_then(|x| x.as_str()).unwrap_or("")
+        ),
+        "weapons" => format!(
+            "{}（{}星 {}）",
+            name,
+            i.get("star").and_then(|x| x.as_i64()).unwrap_or(0),
+            i.get("weaponType").and_then(|x| x.as_str()).unwrap_or("")
+        ),
+        "echoes" => {
+            let sets = i
+                .get("sets")
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str().map(|x| x.to_string()))
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .unwrap_or_default();
+            format!(
+                "{}（Cost {}）{}",
+                name,
+                i.get("cost").and_then(|x| x.as_i64()).unwrap_or(0),
+                if sets.is_empty() { String::new() } else { format!("【{}】", sets) }
+            )
+        }
+        _ => format!(
+            "{}（{}件套）",
+            name,
+            i.get("pieces")
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|p| p.as_i64().map(|v| v.to_string()))
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .unwrap_or_default()
+        ),
     }
 }
 

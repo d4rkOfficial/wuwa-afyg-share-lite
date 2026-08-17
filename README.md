@@ -8,6 +8,7 @@
 - 工程广场（最新/最热排序、搜索、只看登录用户）、分享码、详情预览、下载原始 JSON
 - 登录上传（本地账号，**无邮件系统**）、我的工程（编辑简介标签、设过期、换源、换码、发布/隐藏、删除、保护）
 - Buff 集（角色/武器/声骸/套装的固定增益库）、公开浏览、管理员编辑、全量 SQL 导出
+- **上游名录**——角色/武器/首位声骸/套装列表直接从 [nanoka.cc](https://static.nanoka.cc) 获取（与椰果工具箱同一上游，随游戏版本自动更新；上游不可达时回退本地缓存）
 - Buff 集快照（根 + 版本链：创建/对比/恢复/删除，单快照模型，差异现算不落库）
 - 工程保护（豁免批量删除、单条删除与过期清理）、清空内容（本人/管理员）
 - 管理员权限链（按用户名授权，仅授出者可撤销，连坐收回；首账号为根管理员）
@@ -70,6 +71,7 @@ wuwa-afyg-share-lite admin users   # → 管理员列表
 | `WUWA_AFYG_SHARE_DB` | SQLite 数据库文件路径 | `~/.wuwa-afyg-share-lite/share.db` |
 | `WUWA_AFYG_SHARE_SITE_URL` | 分享链接前缀（POST 返回的 url 字段） | 请求 Host |
 | `WUWA_AFYG_SHARE_SERVER` | CLI 默认服务器地址 | `http://localhost:3000` |
+| `WUWA_AFYG_SHARE_WW_VERSION` | 强制指定上游游戏版本（调试/离线用） | manifest 最新版 |
 
 ## CLI 命令参考
 
@@ -92,6 +94,8 @@ wuwa-afyg-share-lite <COMMAND>
   download <分享码> [-o 文件]      下载工程 JSON
   share <工程.json>               匿名分享（10 分钟有效）
   buff list [--entity-type] [--q] / buff get <类型> <实体> / buff export [-o]
+  catalog version                 上游版本与条目统计（nanoka.cc）
+  catalog list [--type characters|weapons|echoes|sets] [--q]   上游名录
   announcement list
 
 我的工程（需登录）：
@@ -132,7 +136,14 @@ Buff 增益项格式（`buff upsert --zone`）：
 | GET | `/api/buff-sets` | Buff 集：`entity_type` `entity_name` `q` → `{buffSets, total}` |
 | GET | `/api/buff-sets/export` | Buff 集全量 SQL 导出（优先最新快照，无快照用实时数据），`Content-Disposition` 下载 |
 | GET | `/share/{code}/download` | 下载工程 JSON（克隆 +1）；不存在/已过期 → `404 分享已失效` |
+| GET | `/api/catalog` | 上游名录（nanoka.cc）：`{version, source, stale, counts, characters[], weapons[], echoes[], sets[]}` |
+| GET | `/api/catalog/{characters\|weapons\|echoes\|sets}` | 单项名录：`{version, source, stale, <key>: [...]}` |
 | OPTIONS | 上述路径 | `204` + CORS 头（`Access-Control-Allow-*`） |
+
+上游名录条目结构：角色 `{name, star, element, weaponType}`、武器 `{name, star, weaponType}`、
+声骸（首位声骸）`{name, sets[], cost}`、套装 `{name, pieces[]}`；
+数据来自 `https://static.nanoka.cc/ww/{version}/character.json / weapon.json / echo.json / sonata.json`（manifest 取最新版本），
+内存缓存 30 分钟并持久化到 SQLite，上游不可达时返回缓存数据（`stale: true`）。
 
 响应字段与原版逐一对齐（`authorName`、`gameVersion`、`teamPreview`、`downloads`、`createdAt`、`buffSets`、`entity_type` 等）。
 
@@ -155,6 +166,7 @@ Buff 增益项格式（`buff upsert --zone`）：
 | 认证 | GitHub OAuth / 邮箱魔法链接 | 用户名 + 密码；**本机（localhost）免登录直接为 root_admin**（无邮件系统） |
 | AI 工具 | `/api/ai/stream`、deepseek 生成/润色 | ❌ 移除 |
 | bilibili-toy | 工具箱实例认证（toy-auth） | ❌ 移除 |
+| Buff 集实体名录 | 手工录入 | 直接取自上游 nanoka.cc（与椰果工具箱同一数据源） |
 | 部署 | Cloudflare Workers | 任意可运行 Rust 的机器 |
 
 业务规则对齐：10 分钟匿名有效期、非匿名过期一周宽限、保护工程豁免删除与清理、

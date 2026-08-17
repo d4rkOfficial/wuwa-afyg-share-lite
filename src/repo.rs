@@ -842,3 +842,23 @@ pub fn snapshot_chain_items(chain: &[SnapshotRow]) -> Vec<SnapshotChainItem> {
 pub fn unique_violation(e: &rusqlite::Error) -> bool {
     matches!(e, rusqlite::Error::SqliteFailure(ie, _) if ie.code == rusqlite::ErrorCode::ConstraintViolation)
 }
+
+// ── meta 键值 ────────────────────────────────────────────
+
+pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>> {
+    let v = conn
+        .query_row("SELECT value FROM meta WHERE key = ?1", params![key], |r| {
+            r.get::<_, String>(0)
+        })
+        .optional()?;
+    Ok(v)
+}
+
+pub fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}

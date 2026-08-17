@@ -335,6 +335,68 @@ pub async fn share_download(State(state): State<AppState>, Path(code): Path<Stri
     }
 }
 
+// ── 上游名录（nanoka.cc；扩展公开接口）──────────────────
+
+/// GET /api/catalog：全部名录（角色/武器/声骸/套装）
+pub async fn catalog_get(State(state): State<AppState>) -> Response {
+    let conn = state.db.lock().unwrap();
+    match state.upstream.catalog(Some(&conn)) {
+        Ok(data) => {
+            let mut v = serde_json::to_value(&data).unwrap_or(Value::Null);
+            if let Some(obj) = v.as_object_mut() {
+                // 补充条目计数
+                obj.insert(
+                    "counts".to_string(),
+                    json!({
+                        "characters": data.characters.len(),
+                        "weapons": data.weapons.len(),
+                        "echoes": data.echoes.len(),
+                        "sets": data.sets.len(),
+                    }),
+                );
+            }
+            json_res(StatusCode::OK, v)
+        }
+        Err(e) => err_json(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+/// GET /api/catalog/{type}：单项名录（characters/weapons/echoes/sets）
+pub async fn catalog_type_get(
+    State(state): State<AppState>,
+    Path(entity_type): Path<String>,
+) -> Response {
+    let conn = state.db.lock().unwrap();
+    let result = state.upstream.catalog(Some(&conn));
+    match result {
+        Ok(data) => {
+            let key = match entity_type.as_str() {
+                "characters" => "characters",
+                "weapons" => "weapons",
+                "echoes" => "echoes",
+                "sets" => "sets",
+                _ => return err_json(StatusCode::BAD_REQUEST, "无效的名录类型：characters/weapons/echoes/sets"),
+            };
+            let items = match key {
+                "characters" => serde_json::to_value(&data.characters).unwrap_or(Value::Null),
+                "weapons" => serde_json::to_value(&data.weapons).unwrap_or(Value::Null),
+                "echoes" => serde_json::to_value(&data.echoes).unwrap_or(Value::Null),
+                _ => serde_json::to_value(&data.sets).unwrap_or(Value::Null),
+            };
+            json_res(
+                StatusCode::OK,
+                json!({
+                    "version": data.version,
+                    "source": data.source,
+                    "stale": data.stale,
+                    key: items,
+                }),
+            )
+        }
+        Err(e) => err_json(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
 // ── 公告（公开读）────────────────────────────────────────
 
 pub async fn announcements_get(State(state): State<AppState>) -> Response {
