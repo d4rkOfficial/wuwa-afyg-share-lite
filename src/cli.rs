@@ -325,7 +325,10 @@ pub enum CatalogAction {
 
 fn make_client(cli: &Cli) -> Result<Client> {
     let cfg = config::load_config();
-    let server = cli.server.clone().unwrap_or(cfg.server);
+    let mut server = cli.server.clone().unwrap_or(cfg.server);
+    if server.trim().is_empty() {
+        server = config::DEFAULT_SERVER.to_string();
+    }
     let token = cli.token.clone().or(cfg.token);
     Ok(Client::new(&server, token))
 }

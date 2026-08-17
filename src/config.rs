@@ -7,12 +7,21 @@ use std::path::PathBuf;
 pub const DEFAULT_SERVER: &str = "http://localhost:3000";
 pub const APP_DIR_NAME: &str = ".wuwa-afyg-share-lite";
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_server")]
     pub server: String,
     #[serde(default)]
     pub token: Option<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            server: default_server(),
+            token: None,
+        }
+    }
 }
 
 fn default_server() -> String {
@@ -34,9 +43,19 @@ pub fn default_db_path() -> PathBuf {
     app_dir().join("share.db")
 }
 
+/// 读取配置：容忍 UTF-8 BOM（Windows PowerShell 写入的旧文件）与首尾空白
+fn read_config_text(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let mut text = String::from_utf8(bytes).ok()?;
+    if text.starts_with('\u{feff}') {
+        text = text.trim_start_matches('\u{feff}').to_string();
+    }
+    Some(text.trim().to_string())
+}
+
 pub fn load_config() -> Config {
     let path = config_path();
-    if let Ok(text) = std::fs::read_to_string(&path) {
+    if let Some(text) = read_config_text(&path) {
         if let Ok(cfg) = serde_json::from_str::<Config>(&text) {
             return cfg;
         }
