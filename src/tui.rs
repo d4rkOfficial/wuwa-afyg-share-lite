@@ -49,13 +49,13 @@ fn fmt_short(p: &Value, idx: i64) -> String {
 pub fn run(client: &Client) -> Result<()> {
     loop {
         let items = [
-            "🌐 工程广场".to_string(),
-            "👤 我的工程".to_string(),
-            "📊 Buff 集".to_string(),
-            "🛠 管理（管理员）".to_string(),
-            "📢 公告".to_string(),
-            "⬆ 上传工程".to_string(),
-            "❌ 退出".to_string(),
+            "工程广场".to_string(),
+            "我的工程".to_string(),
+            "Buff 集".to_string(),
+            "管理（管理员）".to_string(),
+            "公告".to_string(),
+            "上传工程".to_string(),
+            "退出".to_string(),
         ];
         let sel = select("主菜单", &items, 0)?;
         match sel {
@@ -89,17 +89,17 @@ fn plaza(client: &Client) -> Result<()> {
         let pages = ((total + 11) / 12).max(1);
 
         let mut items: Vec<String> = Vec::new();
-        items.push(format!("⬅ 上一页（当前第 {} / {} 页）", page, pages));
-        items.push(format!("➡ 下一页（共 {} 个工程）", total));
+        items.push(format!("上一页（当前第 {} / {} 页）", page, pages));
+        items.push(format!("下一页（共 {} 个工程）", total));
         items.push(format!(
-            "🔍 搜索：{}",
+            "搜索：{}",
             q.as_deref().unwrap_or("（无）")
         ));
-        items.push(format!("↕ 排序：{}", if sort == "heat" { "最热" } else { "最新" }));
+        items.push(format!("排序：{}", if sort == "heat" { "最热" } else { "最新" }));
         for (i, p) in projects.iter().enumerate() {
             items.push(fmt_short(p, (page - 1) * 12 + i as i64 + 1));
         }
-        items.push("🔙 返回".to_string());
+        items.push("返回".to_string());
 
         let sel = select("工程广场", &items, 4)?;
         match sel {
@@ -156,8 +156,8 @@ fn project_detail(client: &Client, code: &str) -> Result<()> {
     println!("到期：{}", v.get("expiresAt").and_then(|x| x.as_str()).unwrap_or("永久"));
     println!("────────────────────────────");
     let items = [
-        "⬇ 下载 JSON".to_string(),
-        "🔙 返回".to_string(),
+        "下载 JSON".to_string(),
+        "返回".to_string(),
     ];
     let sel = select("操作", &items, 0)?;
     if sel == 0 {
@@ -239,7 +239,7 @@ fn my_projects(client: &Client) -> Result<()> {
         let stats = v.get("stats").cloned().unwrap_or(Value::Null);
         let mut items: Vec<String> = Vec::new();
         items.push(format!(
-            "📊 工程 {} ｜ 过期 {} ｜ 浏览 {} ｜ 克隆 {}",
+            "工程 {} ｜ 过期 {} ｜ 浏览 {} ｜ 克隆 {}",
             stats.get("projects").and_then(|x| x.as_i64()).unwrap_or(0),
             stats.get("expiredCount").and_then(|x| x.as_i64()).unwrap_or(0),
             stats.get("totalViews").and_then(|x| x.as_i64()).unwrap_or(0),
@@ -249,7 +249,7 @@ fn my_projects(client: &Client) -> Result<()> {
             let title = p.get("title").and_then(|x| x.as_str()).unwrap_or("?");
             let code = p.get("code").and_then(|x| x.as_str()).unwrap_or("");
             let hidden = if p.get("published").and_then(|x| x.as_bool()).unwrap_or(true) { "" } else { "（已隐藏）" };
-            let prot = if p.get("protected").and_then(|x| x.as_bool()).unwrap_or(false) { "🔒" } else { "" };
+            let prot = if p.get("protected").and_then(|x| x.as_bool()).unwrap_or(false) { "（已保护）" } else { "" };
             let created = p
                 .get("created_at")
                 .and_then(|x| x.as_str())
@@ -258,7 +258,7 @@ fn my_projects(client: &Client) -> Result<()> {
                 .unwrap_or_default();
             items.push(format!("[{}] {}{}{} ｜ {} ｜ {}", i + 1, title, hidden, prot, code, created));
         }
-        items.push("🔙 返回".to_string());
+        items.push("返回".to_string());
         let sel = select("我的工程", &items, 0)?;
         if sel == 0 {
             continue;
@@ -288,14 +288,14 @@ fn my_project_actions(client: &mut Client, id: &str) -> Result<bool> {
     println!("浏览 {} ｜ 下载 {} ｜ 创建 {}", format_count(v.get("view_count").and_then(|x| x.as_i64()).unwrap_or(0)), format_count(v.get("clone_count").and_then(|x| x.as_i64()).unwrap_or(0)), v.get("created_at").and_then(|x| x.as_str()).unwrap_or(""));
     println!("────────────────────────────");
     let items = [
-        "✏ 编辑标题/简介/标签".to_string(),
-        "⏰ 设置过期".to_string(),
-        "🔁 换源（替换工程文件）".to_string(),
-        "🎲 重新生成分享码".to_string(),
-        "👁 发布/隐藏切换".to_string(),
-        "🔒 保护/解除保护".to_string(),
-        "🗑 删除".to_string(),
-        "🔙 返回".to_string(),
+        "编辑标题/简介/标签".to_string(),
+        "设置过期".to_string(),
+        "换源（替换工程文件）".to_string(),
+        "重新生成分享码".to_string(),
+        "发布/隐藏切换".to_string(),
+        "保护/解除保护".to_string(),
+        "删除".to_string(),
+        "返回".to_string(),
     ];
     let sel = select("操作", &items, 7)?;
     match sel {
@@ -358,9 +358,9 @@ const ENTITY_TYPES: [&str; 9] = ["全部", "character", "weapon", "echo", "1set"
 fn buff_menu(client: &Client) -> Result<()> {
     loop {
         let items = [
-            "📦 Buff 集数据".to_string(),
-            "🌐 上游名录（nanoka.cc）".to_string(),
-            "🔙 返回".to_string(),
+            "Buff 集数据".to_string(),
+            "上游名录（nanoka.cc）".to_string(),
+            "返回".to_string(),
         ];
         let sel = select("Buff 集", &items, 0)?;
         match sel {
@@ -390,7 +390,7 @@ fn catalog_menu(client: &Client) -> Result<()> {
     const LABELS: [&str; 4] = ["角色", "武器", "首位声骸", "套装"];
     loop {
         let mut type_items: Vec<String> = LABELS.iter().map(|l| l.to_string()).collect();
-        type_items.push("🔙 返回".to_string());
+        type_items.push("返回".to_string());
         let sel = select("上游名录", &type_items, 0)?;
         if sel >= TYPES.len() {
             return Ok(());
@@ -424,7 +424,7 @@ fn catalog_menu(client: &Client) -> Result<()> {
             continue;
         }
         let mut menu: Vec<String> = filtered.iter().map(|i| catalog_item_label(t, i)).collect();
-        menu.push("🔙 返回".to_string());
+        menu.push("返回".to_string());
         let sel2 = select(
             &format!("{}名录（{} 条，ww {}）", LABELS[sel], filtered.len(), v.get("version").and_then(|x| x.as_str()).unwrap_or("?")),
             &menu,
@@ -536,7 +536,7 @@ fn buff_entity_list(client: &Client, entity_type: Option<&str>) -> Result<()> {
         return Ok(());
     }
     let mut items: Vec<String> = groups.iter().map(|(k, list)| format!("{}（{} 条）", k, list.len())).collect();
-    items.push("🔙 返回".to_string());
+    items.push("返回".to_string());
     let sel = select("选择实体", &items, 0)?;
     if sel >= groups.len() {
         return Ok(());
@@ -547,7 +547,7 @@ fn buff_entity_list(client: &Client, entity_type: Option<&str>) -> Result<()> {
         let zones = b.get("buff_set").and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0);
         format!("{}（{} 项增益）", name, zones)
     }).collect();
-    buff_items.push("🔙 返回".to_string());
+    buff_items.push("返回".to_string());
     let sel2 = select("选择 Buff", &buff_items, 0)?;
     if sel2 < buffs.len() {
         let b = &buffs[sel2];
@@ -583,15 +583,15 @@ fn admin_menu(client: &Client) -> Result<()> {
     loop {
         let items = [
             "👥 管理员列表".to_string(),
-            "➕ 授权管理员".to_string(),
-            "➖ 撤销管理员".to_string(),
-            "📋 工程管理".to_string(),
-            "🧹 清空用户工程".to_string(),
-            "📸 快照管理".to_string(),
-            "📢 公告管理".to_string(),
-            "⏰ 清理过期工程".to_string(),
-            "🧪 写入示例数据".to_string(),
-            "🔙 返回".to_string(),
+            "授权管理员".to_string(),
+            "撤销管理员".to_string(),
+            "工程管理".to_string(),
+            "清空用户工程".to_string(),
+            "快照管理".to_string(),
+            "公告管理".to_string(),
+            "清理过期工程".to_string(),
+            "写入示例数据".to_string(),
+            "返回".to_string(),
         ];
         let sel = select("管理", &items, 9)?;
         match sel {
@@ -673,15 +673,15 @@ fn admin_projects_menu(client: &mut Client) -> Result<()> {
         let items = v.get("items").and_then(|x| x.as_array()).cloned().unwrap_or_default();
         let total = v.get("total").and_then(|x| x.as_i64()).unwrap_or(0);
         let mut menu: Vec<String> = Vec::new();
-        menu.push(format!("⬅ 上一页（共 {} 个工程）", total));
-        menu.push("➡ 下一页".to_string());
+        menu.push(format!("上一页（共 {} 个工程）", total));
+        menu.push("下一页".to_string());
         for (i, p) in items.iter().enumerate() {
             let title = p.get("title").and_then(|x| x.as_str()).unwrap_or("?");
             let author = p.get("author_name").and_then(|x| x.as_str()).unwrap_or("?");
             let code = p.get("code").and_then(|x| x.as_str()).unwrap_or("");
             menu.push(format!("[{}] {}（{}）作者：{}", (page - 1) * 20 + i as i64 + 1, title, code, author));
         }
-        menu.push("🔙 返回".to_string());
+        menu.push("返回".to_string());
         let sel = select("工程管理", &menu, 0)?;
         match sel {
             0 => {
@@ -724,7 +724,7 @@ fn snapshots_menu(client: &mut Client) -> Result<()> {
         let v = client.get("/api/admin/snapshots", &[])?.ok_json()?;
         let snaps = v.get("snapshots").and_then(|x| x.as_array()).cloned().unwrap_or_default();
         let mut menu: Vec<String> = Vec::new();
-        menu.push("➕ 创建快照".to_string());
+        menu.push("创建快照".to_string());
         for s in &snaps {
             let id = s.get("id").and_then(|x| x.as_str()).unwrap_or("");
             let note = s.get("note").and_then(|x| x.as_str()).unwrap_or("");
@@ -738,7 +738,7 @@ fn snapshots_menu(client: &mut Client) -> Result<()> {
                 .unwrap_or_default();
             menu.push(format!("[{}] {}{} {} ｜ {}", root, note, latest, created, id));
         }
-        menu.push("🔙 返回".to_string());
+        menu.push("返回".to_string());
         let sel = select("快照管理", &menu, 0)?;
         if sel == 0 {
             let note = input::<String>("备注（可留空）", Some(String::new()))?;
@@ -757,10 +757,10 @@ fn snapshots_menu(client: &mut Client) -> Result<()> {
         let s = &snaps[sel - 1];
         let id = s.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let actions = [
-            "📊 对比当前差异".to_string(),
-            "♻ 恢复到该快照".to_string(),
-            "🗑 删除（仅最新版本）".to_string(),
-            "🔙 返回".to_string(),
+            "对比当前差异".to_string(),
+            "恢复到该快照".to_string(),
+            "删除（仅最新版本）".to_string(),
+            "返回".to_string(),
         ];
         let a = select("快照操作", &actions, 3)?;
         match a {
@@ -811,7 +811,7 @@ fn announcements_admin_menu(client: &mut Client) -> Result<()> {
         let v = client.get("/api/announcements", &[])?.ok_json()?;
         let rows = v.get("announcements").and_then(|x| x.as_array()).cloned().unwrap_or_default();
         let mut menu: Vec<String> = Vec::new();
-        menu.push("➕ 新建公告".to_string());
+        menu.push("新建公告".to_string());
         for (i, a) in rows.iter().enumerate() {
             menu.push(format!(
                 "[{}] {}（{}）",
@@ -820,7 +820,7 @@ fn announcements_admin_menu(client: &mut Client) -> Result<()> {
                 a.get("createdAt").and_then(|x| x.as_str()).unwrap_or("")
             ));
         }
-        menu.push("🔙 返回".to_string());
+        menu.push("返回".to_string());
         let sel = select("公告管理", &menu, 0)?;
         if sel == 0 {
             let title = input::<String>("标题", None::<String>)?;
