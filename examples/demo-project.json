@@ -1,0 +1,53 @@
+{
+  "id": "demo-project-001",
+  "name": "示例工程·今汐双衍射队",
+  "createdAt": 1735689600000,
+  "team": [
+    {
+      "character": "今汐",
+      "weapon": "千古洑流",
+      "triggerSets": [
+        { "name": "轻云出月", "pieces": 5 }
+      ],
+      "echoes": [
+        { "name": "无常凶鹭", "cost": 4 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 }
+      ]
+    },
+    {
+      "character": "维里奈",
+      "weapon": "奇幻变奏",
+      "triggerSets": [],
+      "echoes": [
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 }
+      ]
+    },
+    {
+      "character": "守岸人",
+      "weapon": null,
+      "triggerSets": [],
+      "echoes": [
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 },
+        { "name": null, "cost": 0 }
+      ]
+    }
+  ],
+  "customSkillHits": {},
+  "lockedTeamNames": ["今汐", "维里奈", "守岸人"],
+  "phases": {
+    "team": { "locked": true, "data": null },
+    "timeline": { "locked": false, "data": null },
+    "calculation": { "locked": true, "data": null },
+    "config": { "locked": false, "data": null }
+  }
+}

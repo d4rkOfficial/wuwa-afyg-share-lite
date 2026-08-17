@@ -1,6 +1,6 @@
 // 展示格式化（对齐原版 src/lib/utils/format.ts）
 
-use chrono::{Local, TimeZone};
+use chrono::{Datelike, Local, TimeZone};
 
 /// YYYY-MM-DD（本地时区，与原版 Date 方法一致）
 pub fn format_date(ts_ms: i64) -> String {

@@ -46,8 +46,13 @@ pub fn is_expired_project(expires_at: Option<&str>, author_name: Option<&str>, n
 
 /// 是否处于宽限期（已到到期日但还在宽限内，仅非匿名工程）
 pub fn is_grace_period(expires_at: Option<&str>, author_name: Option<&str>, now_ms: i64) -> bool {
-    let s = expires_at?;
-    let due = parse_time_ms(s)?;
+    let s = match expires_at {
+        Some(s) => s,
+        None => return false,
+    };
+    let Some(due) = parse_time_ms(s) else {
+        return false;
+    };
     if is_anonymous_name(author_name) {
         return false;
     }

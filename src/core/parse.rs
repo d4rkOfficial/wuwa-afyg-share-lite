@@ -5,12 +5,12 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::compress::MAX_RAW_BYTES;
-
 pub const EXPORT_VERSION: i64 = 1;
 
+#[allow(dead_code)]
 pub const PHASE_KEYS: [&str; 4] = ["team", "timeline", "calculation", "config"];
 
+#[allow(dead_code)]
 pub const PHASE_LABELS: [(&str, &str); 4] = [
     ("team", "队伍配置"),
     ("timeline", "排轴"),
@@ -153,13 +153,15 @@ fn sanitize_team(raw: &Value) -> Vec<CharSlot> {
                 _ => EchoSlot { name: None, cost: 0.0 },
             }
         };
-        let echoes_arr = echoes_raw.map(|v| v.as_array().unwrap()).unwrap_or(&Vec::new());
+        let echoes_arr: Vec<Value> = echoes_raw
+            .map(|v| v.as_array().unwrap().clone())
+            .unwrap_or_default();
         let echoes = vec![
-            to_echo(echoes_arr.get(0).copied()),
-            to_echo(echoes_arr.get(1).copied()),
-            to_echo(echoes_arr.get(2).copied()),
-            to_echo(echoes_arr.get(3).copied()),
-            to_echo(echoes_arr.get(4).copied()),
+            to_echo(echoes_arr.get(0)),
+            to_echo(echoes_arr.get(1)),
+            to_echo(echoes_arr.get(2)),
+            to_echo(echoes_arr.get(3)),
+            to_echo(echoes_arr.get(4)),
         ];
         team[i] = CharSlot {
             character,

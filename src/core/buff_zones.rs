@@ -2,8 +2,9 @@
 
 use serde_json::Value;
 
-use crate::types::{BuffCondition, BuffScope};
+use crate::types::BuffCondition;
 
+#[allow(dead_code)]
 pub struct BuffZoneDef {
     pub id: &'static str,
     pub label: &'static str,
@@ -40,6 +41,7 @@ pub const BUFF_ZONES: &[BuffZoneDef] = &[
 
 pub const BUFF_ENTITY_TYPES: &[&str] = &["character", "weapon", "echo", "1set", "2set", "3set", "4set", "5set"];
 
+#[allow(dead_code)]
 pub const BUFF_ENTITY_LABELS: &[(&str, &str)] = &[
     ("character", "角色"),
     ("weapon", "武器"),
@@ -66,8 +68,9 @@ pub const BUFF_REF_ZONES: &[(&str, &str, &str)] = &[
     ("critDmg", "暴击伤害", "%"),
 ];
 
-pub const BUFF_SCOPES: &[BuffScope] = &["self", "self_except", "team", "effect_only"];
+pub const BUFF_SCOPES: &[&str] = &["self", "self_except", "team", "effect_only"];
 
+#[allow(dead_code)]
 pub const BUFF_SCOPE_LABELS: &[(&str, &str)] = &[
     ("self", "对自己"),
     ("self_except", "自己除外"),
@@ -93,6 +96,7 @@ pub const BUFF_DAMAGE_TYPES: &[&str] = &[
     "其它类型伤害",
 ];
 
+#[allow(dead_code)]
 pub const BUFF_DAMAGE_TYPE_SHORT: &[(&str, &str)] = &[
     ("普攻伤害", "普攻"),
     ("重击伤害", "重击"),

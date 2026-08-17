@@ -1,5 +1,7 @@
 // 角色名 → 属性（与原版 src/lib/data/char-elements.ts 一致）
 
+#![allow(dead_code)]
+
 pub const CHAR_ELEMENTS: &[(&str, &str)] = &[
     ("爱弥斯", "热熔"),
     ("安可", "热熔"),

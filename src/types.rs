@@ -6,7 +6,9 @@ use crate::core::extract::TeamPreview;
 
 // ── Buff 集 ──────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub type BuffEntityType = String;
+#[allow(dead_code)]
 pub type BuffScope = String;
 
 /// 生效条件（多字段可并存，全部满足才生效）
@@ -133,12 +135,85 @@ pub struct PublicProjectItem {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectListResponse {
     pub projects: Vec<PublicProjectItem>,
     pub total: i64,
     pub page: i64,
     pub per_page: i64,
+}
+
+/// 工程完整行 JSON（字段名与原版 PostgREST 输出一致：snake_case）
+#[derive(Clone, Debug, Serialize)]
+pub struct ProjectItemJson {
+    pub id: String,
+    pub code: String,
+    #[serde(rename = "author_id")]
+    pub author_id: Option<String>,
+    #[serde(rename = "author_name")]
+    pub author_name: String,
+    pub title: String,
+    pub description: String,
+    pub tags: Vec<String>,
+    #[serde(rename = "game_version")]
+    pub game_version: Option<String>,
+    #[serde(rename = "team_preview")]
+    pub team_preview: Option<TeamPreview>,
+    pub published: bool,
+    #[serde(rename = "expires_at")]
+    pub expires_at: Option<String>,
+    #[serde(rename = "view_count")]
+    pub view_count: i64,
+    #[serde(rename = "clone_count")]
+    pub clone_count: i64,
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+    pub protected: bool,
+}
+
+impl From<&ProjectListItem> for ProjectItemJson {
+    fn from(p: &ProjectListItem) -> Self {
+        ProjectItemJson {
+            id: p.id.clone(),
+            code: p.code.clone(),
+            author_id: p.author_id.clone(),
+            author_name: p.author_name.clone(),
+            title: p.title.clone(),
+            description: p.description.clone(),
+            tags: p.tags.clone(),
+            game_version: p.game_version.clone(),
+            team_preview: p.team_preview.clone(),
+            published: p.published,
+            expires_at: p.expires_at.clone(),
+            view_count: p.view_count,
+            clone_count: p.clone_count,
+            created_at: p.created_at.clone(),
+            updated_at: p.updated_at.clone(),
+            protected: p.protected,
+        }
+    }
+}
+
+/// 用户 JSON（本地认证扩展接口用）
+#[derive(Clone, Debug, Serialize)]
+pub struct UserJson {
+    pub id: String,
+    pub username: String,
+    #[serde(rename = "isAdmin")]
+    pub is_admin: bool,
+}
+
+impl From<&UserCtx> for UserJson {
+    fn from(u: &UserCtx) -> Self {
+        UserJson {
+            id: u.id.clone(),
+            username: u.username.clone(),
+            is_admin: u.is_admin,
+        }
+    }
 }
 
 // ── 用户 / 会话 ──────────────────────────────────────────
@@ -207,6 +282,7 @@ pub struct SnapshotDiff {
 
 // ── 管理员授权边 ─────────────────────────────────────────
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct AdminGrantRow {
     pub id: String,
