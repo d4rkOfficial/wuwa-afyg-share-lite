@@ -160,6 +160,11 @@ const API = {
 };
 
 /* ═══════════════ 工具 ═══════════════ */
+/* 本机回环地址：服务端按 TCP 对端 IP 免登录，自动为根管理员 root_admin（一键登录） */
+const IS_LOCAL = (() => {
+  const h = (location.hostname || '').toLowerCase();
+  return h === 'localhost' || h === '::1' || h.startsWith('127.');
+})();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const fmtCount = (n) => (n >= 10000 ? (n / 10000).toFixed(1) + 'w' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
@@ -237,8 +242,16 @@ class LiteHeader extends HTMLElement {
     });
     this._user = this.shadowRoot.getElementById('user');
   }
-  setUser(u) {
-    if (u) {
+  /**
+   * 渲染右上角用户区
+   * @param u 用户信息（null = 未登录）
+   * @param localRoot 是否为本机免登录的 root_admin（不显示登录/退出，仅提示）
+   */
+  setUser(u, localRoot) {
+    if (localRoot) {
+      this._user.innerHTML = '本机管理员：<b></b>（免登录）';
+      this._user.querySelector('b').textContent = u ? u.username : 'root_admin';
+    } else if (u) {
       this._user.innerHTML = esc(u.username) + (u.isAdmin ? '（管理员）' : '') + ' <button id="me-logout">退出</button>';
       this._user.querySelector('#me-logout').addEventListener('click', async () => {
         try { await API.post('/api/auth/logout'); } catch (e) { /* 忽略 */ }
@@ -286,6 +299,14 @@ function openLogin() {
 
 async function refreshUser() {
   const header = document.querySelector('lite-header');
+  if (IS_LOCAL) {
+    // 本机免登录：无需 token，服务端按回环 IP 自动以 root_admin 身份响应（一键登录）
+    try {
+      const data = await API.get('/api/auth/me');
+      header.setUser(data.user, true);
+    } catch (e) { header.setUser(null, true); }
+    return;
+  }
   if (!API.token) { header.setUser(null); return; }
   try {
     const data = await API.get('/api/auth/me');
@@ -377,7 +398,8 @@ async function openDetail(code) {
 /* ═══════════════ 上传 ═══════════════ */
 function openUpload() {
   const m = document.getElementById('upload-modal');
-  const logged = !!API.token;
+  // 本机免登录 root_admin 也按登录态上传（可填简介/标签/过期）
+  const logged = IS_LOCAL || !!API.token;
   m.open(
     '<h3>' + (logged ? '上传工程（登录）' : '匿名分享（10 分钟有效）') + '</h3>' +
     '<div class="mt"><input type="file" id="up-file" accept=".json,application/json"></div>' +
@@ -420,8 +442,8 @@ document.getElementById('mine-upload').addEventListener('click', openUpload);
 /* ═══════════════ 我的工程 ═══════════════ */
 async function loadMine() {
   const list = document.getElementById('mine-list');
-  if (!API.token) {
-    list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程。</div>';
+  if (!IS_LOCAL && !API.token) {
+    list.innerHTML = '<div class="card">未登录。点击右上角「登录 / 注册」后管理自己的工程（本机打开则自动为 root_admin）。</div>';
     return;
   }
   list.textContent = '加载中…';
