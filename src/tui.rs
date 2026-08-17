@@ -50,6 +50,11 @@ enum Action {
         params: Vec<String>,
         description: Option<String>,
     },
+    /// 通过「导出格式 SQL 文件」批量导入 Buff 集
+    ImportBuff {
+        params: Vec<String>,
+        description: Option<String>,
+    },
 }
 
 /// 占位符 {name} 提取，并按出现顺序去重
@@ -192,7 +197,22 @@ fn parse_script(json: &Value) -> Result<(String, String, Option<String>, Vec<Men
                     }
                     Some(Action::Command { cmd, params, description })
                 }
-                other => bail!("不支持的动作类型：{}（支持 sql / http / command）", other),
+                other => match typ.as_str() {
+                    "import-buff-sql" => {
+                        // 输入导出格式 SQL 文件路径，批量导入 Buff 集
+                        let mut params: Vec<String> = a
+                            .get("params")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.iter().filter_map(|p| p.as_str().map(String::from)).collect())
+                            .unwrap_or_default();
+                        // 默认参数：先问文件路径
+                        if params.is_empty() {
+                            params.push("SQL文件路径".into());
+                        }
+                        Some(Action::ImportBuff { params, description })
+                    }
+                    _ => bail!("不支持的动作类型：{}（支持 sql / http / command / import-buff-sql）", other),
+                }
             }
         } else { None };
         items.push(MenuItem { label, exit, action });
@@ -200,97 +220,36 @@ fn parse_script(json: &Value) -> Result<(String, String, Option<String>, Vec<Men
     Ok((title, author, description, items))
 }
 
-/// 打开数据库连接（只读、打开 SQLite 数据库文件，本项目内）。SQL 动作直接对它执行。
-fn sql_run(sql: &str) -> Result<()> {
-    use rusqlite::Connection;
-    use std::time::Instant;
-    let path = crate::config::default_db_path();
+/// 打开数据库连接（读写打开 app_dir 下的 share.db）。SQL 动作直接对它执行。
+/// TUI 以脚本作者身份（默认 root_admin，或本机 Root）运行，管理员可写。
+fn open_conn(app_dir: &std::path::Path) -> Result<rusqlite::Connection> {
+    let path = app_dir.join("share.db");
     if !path.exists() {
         bail!("数据库文件不存在：{}（先启动过 `lite serve` 或 `lite tui` 创建）", path.display());
     }
-    let conn = Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| anyhow::anyhow!("打开数据库失败：{}", e))?;
-    let start = Instant::now();
-    let mut stmt = conn.prepare(sql).map_err(|e| anyhow::anyhow!("SQL 准备失败：{}", e))?;
-    let col_count = stmt.column_count();
-    let rows: Vec<Vec<String>> = stmt
-        .query_map([], |r| {
-            let mut row = Vec::with_capacity(col_count);
-            for i in 0..col_count {
-                let v: rusqlite::types::ValueRef = r.get_ref(i)?;
-                row.push(match v {
-                    rusqlite::types::ValueRef::Null => "(NULL)".into(),
-                    rusqlite::types::ValueRef::Integer(i) => i.to_string(),
-                    rusqlite::types::ValueRef::Real(f) => f.to_string(),
-                    rusqlite::types::ValueRef::Text(t) => String::from_utf8_lossy(t).to_string(),
-                    rusqlite::types::ValueRef::Blob(b) => format!("<blob {} bytes>", b.len()),
-                });
-            }
-            Ok(row)
-        })
-        .map_err(|e| anyhow::anyhow!("SQL 执行失败：{}", e))?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|e| anyhow::anyhow!("SQL 读取失败：{}", e))?;
-    let ms = start.elapsed().as_millis();
-    println!("（SQL 用时 {} ms，影响 {} 行）", ms, rows.len());
-    if rows.is_empty() {
-        println!("（无结果）");
-        return Ok(());
+    rusqlite::Connection::open(&path)
+        .map_err(|e| anyhow::anyhow!("打开数据库失败：{}", e))
+}
+
+/// TUI 以脚本 author 身份作为当前用户；本机 / root_admin = 管理员。
+fn script_user(author: &str) -> crate::types::UserCtx {
+    crate::types::UserCtx {
+        id: author.to_string(),
+        username: author.to_string(),
+        is_admin: author == "root_admin",
     }
-    // 计算每列宽度
-    let headers: Vec<String> = (0..col_count)
-        .map(|i| stmt.column_name(i).unwrap_or("?").to_string())
-        .collect();
-    print_table(&headers, &rows);
+}
+
+/// 执行一条 SQL 并通过 sql_engine 打印结果。
+fn sql_run_for(user: &crate::types::UserCtx, sql: &str, app_dir: &std::path::Path) -> Result<()> {
+    let conn = open_conn(app_dir)?;
+    let r = crate::sql_engine::run_sql_on(user, sql, &conn)?;
+    crate::sql_engine::print_sql_result(&r);
     Ok(())
 }
 
-fn print_table(headers: &[String], rows: &[Vec<String>]) {
-    let mut widths = headers.iter().map(|h| h.chars().count()).collect::<Vec<_>>();
-    for row in rows {
-        for (i, cell) in row.iter().enumerate() {
-            if let Some(w) = widths.get_mut(i) {
-                *w = (*w).max(cell.chars().count());
-            }
-        }
-    }
-    print_row(headers, &widths, true);
-    for row in rows {
-        print_row(row, &widths, false);
-    }
-}
-
-fn print_row(cells: &[String], widths: &[usize], is_header: bool) {
-    let sep = is_header;
-    for (i, c) in cells.iter().enumerate() {
-        let w = widths.get(i).copied().unwrap_or(0);
-        if is_header {
-            print!("{}{:width$}", if i == 0 { "" } else { "│" }, c, width = w + 2);
-        } else if sep && i == 0 {
-            // 头部分隔线之后跳到下一行——简化：直接打印分隔行再下一步
-        } else {
-            print!("{}{:width$}", if i == 0 { "" } else { "│" }, c, width = w + 2);
-        }
-    }
-    println!();
-    if sep {
-        // 分隔线
-        let mut dash = String::new();
-        for (i, w) in widths.iter().enumerate() {
-            if i == 0 {
-                dash.push_str(&format!("{}", "─".repeat(w + 2)));
-            } else {
-                dash.push_str(&format!("┴{}", "─".repeat(w + 2)));
-            }
-        }
-        // 简化为整行
-        let total = widths.iter().sum::<usize>() + (widths.len().saturating_sub(1)) * 1 + 4;
-        println!("{}", "─".repeat(total));
-    }
-}
-
-/// 执行一个动作（ask_for_params: 向用户收集占位符）
-fn run_action(client: &Client, action: &Action) -> Result<()> {
+/// 执行一个动作（用户 = 脚本 author 身份，root_admin 可写）
+fn run_action(client: &Client, app_dir: &std::path::Path, user: &crate::types::UserCtx, action: &Action) -> Result<()> {
     match action {
         Action::Sql { sql, params, description } => {
             if let Some(desc) = description {
@@ -301,7 +260,31 @@ fn run_action(client: &Client, action: &Action) -> Result<()> {
             } else { std::collections::HashMap::new() };
             let final_sql = apply_placeholders(sql, &map);
             println!("SQL: {}", final_sql);
-            sql_run(&final_sql)
+            sql_run_for(user, &final_sql, app_dir)
+        }
+        Action::ImportBuff { params, description } => {
+            if let Some(desc) = description {
+                println!("—— {} ——", desc);
+            }
+            if !user.is_admin {
+                bail!("仅为管理员可导入 Buff 集（当前身份 {} 非管理员）", user.username);
+            }
+            let map = prompt_placeholders(params.clone())?;
+            // 文件路径占位（默认任务名）
+            let path_raw = map.get("SQL 文件路径").or_else(|| map.get("SQL文件路径")).or_else(|| map.values().next());
+            let Some(path_raw) = path_raw else {
+                bail!("请提供 Buff 集导出 SQL 文件路径");
+            };
+            let p = std::path::PathBuf::from(path_raw);
+            if !p.exists() {
+                bail!("SQL 文件不存在：{}", p.display());
+            }
+            let text = std::fs::read_to_string(&p)
+                .map_err(|e| anyhow::anyhow!("读取 SQL 文件失败：{}", e))?;
+            let conn = open_conn(app_dir)?;
+            let n = crate::import_buff::import_from_sql(&conn, &text)?;
+            println!("已批量导入 {} 条 Buff 集", n);
+            Ok(())
         }
         Action::Http { method, path, body_template, params, description } => {
             if let Some(desc) = description {
@@ -378,10 +361,12 @@ pub fn run(client: &Client, app_dir: PathBuf) -> Result<()> {
     let json_str = assets::tui_script_content(&app_dir)?;
     let root: Value = serde_json::from_str(&json_str)
         .map_err(|e| anyhow::anyhow!("tui-script.json 解析失败：{}（用 `lite reset-templates` 恢复默认）", e))?;
-    let (title, _author, _description, items) = parse_script(&root)?;
+    let (title, author, _description, items) = parse_script(&root)?;
     if items.is_empty() {
         bail!("tui-script.json 中没有菜单项");
     }
+    // 以脚本 author 身份运行（root_admin = 管理员可写）
+    let user = script_user(&author);
 
     loop {
         let labels: Vec<String> = items.iter().map(|m| m.label.clone()).collect();
@@ -392,7 +377,7 @@ pub fn run(client: &Client, app_dir: PathBuf) -> Result<()> {
         }
         if let Some(action) = &item.action {
             println!();
-            if let Err(e) = run_action(client, action) {
+            if let Err(e) = run_action(client, &app_dir, &user, action) {
                 println!("错误：{}", e);
             }
         } else {

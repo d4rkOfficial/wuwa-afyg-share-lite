@@ -51,6 +51,14 @@
       }
     },
     {
+      "label": "SQL 导入 Buff 集（输入导出格式 SQL 文件）",
+      "description": "批量导入 Buff 集：输入 /api/buff-sets/export 导出的 SQL 文件路径",
+      "action": {
+        "type": "import-buff-sql",
+        "params": ["SQL 文件路径"]
+      }
+    },
+    {
       "label": "退出",
       "exit": true
     }

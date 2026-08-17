@@ -154,6 +154,15 @@ pub enum Command {
     },
     /// 写入示例数据（管理员）
     Demo,
+    /// 直接对本机 SQLite 执行 SQL（本机 localhost 可用，管理员可写）
+    Sql {
+        /// 直接执行 SQL 文件，跳过输入提示
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// 数据库路径（默认 ~/.wuwa-afyg-share-lite/share.db；可用环境变量 WUWA_AFYG_SHARE_DB）
+        #[arg(long, env = "WUWA_AFYG_SHARE_DB")]
+        db: Option<PathBuf>,
+    },
     /// 启动交互式 TUI（由数据目录 tui-script.json 驱动）
     Tui,
     /// 恢复默认 TUI 脚本 / Web 页面（内置模板写回数据目录）
@@ -441,6 +450,7 @@ pub fn run(cli: &Cli) -> Result<()> {
         Command::Cleanup => run_cleanup(cli),
         Command::Wipe { force } => run_wipe(cli, *force),
         Command::Demo => run_demo(cli),
+        Command::Sql { path, db } => run_sql(cli, path.clone(), db.clone()),
         Command::Tui => crate::tui::run(&make_client(cli)?, config::app_dir()),
         Command::ResetTemplates { tui_only, web_only, db } => {
             run_reset_templates(*tui_only, *web_only, db.as_ref())
@@ -1548,6 +1558,137 @@ fn run_demo(cli: &Cli) -> Result<()> {
     let v = resp.ok_json()?;
     println!("{}", v.get("message").and_then(|x| x.as_str()).unwrap_or("示例数据已写入"));
     Ok(())
+}
+
+/// 直接对本机 SQLite 执行 SQL。
+/// - 仅本机（localhost）客户端可用；连接非本机时拒绝（sql 直连本地文件，不经过服务器鉴权）。
+/// - 本机即 root_admin（管理员），可执行任意 SQL（含 UPDATE/DELETE）。
+/// - `--path` 指定 SQL 文件，否则进入交互式多行输入（空行结束）。
+fn run_sql(cli: &Cli, path: Option<PathBuf>, db: Option<PathBuf>) -> Result<()> {
+    let client = make_client(cli)?;
+    // 出于安全：sql 命令直连本机 DB 文件，仅允许本机连接（本机 Root 管理员）。
+    if !crate::client::is_loopback_url(&client.base) {
+        bail!(
+            "sql 命令仅本机可用：当前服务器为 {}。sql 直接操作本机数据库文件，不经过服务器权限校验。",
+            client.base
+        );
+    }
+    // 连接数据库（读写打开，管理员本机）
+    let db_path = db.unwrap_or_else(config::default_db_path);
+    if !db_path.exists() {
+        bail!("数据库文件不存在：{}（先启动过 `lite serve` 或 `lite tui` 创建）", db_path.display());
+    }
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| anyhow::anyhow!("打开数据库失败：{}", e))?;
+
+    // 本机身份即 root_admin（管理员）
+    let user = crate::types::UserCtx {
+        id: "root_admin".into(),
+        username: "root_admin".into(),
+        is_admin: true,
+    };
+
+    let sql_text = match path {
+        Some(p) => {
+            std::fs::read_to_string(&p)
+                .map_err(|e| anyhow::anyhow!("读取 SQL 文件失败：{}", e))?
+        }
+        None => {
+            println!("（输入 SQL，每行一条/整体粘贴；空行结束执行）");
+            let mut buf = String::new();
+            loop {
+                use std::io::Write;
+                print!("> ");
+                std::io::stdout().flush()?;
+                let mut line = String::new();
+                let n = std::io::stdin().read_line(&mut line)?;
+                if n == 0 {
+                    break; // EOF
+                }
+                if line.trim().is_empty() {
+                    break; // 空行结束
+                }
+                buf.push_str(&line);
+            }
+            if buf.trim().is_empty() {
+                println!("（未输入任何 SQL）");
+                return Ok(());
+            }
+            buf
+        }
+    };
+
+    // 自动识别「导出格式」SQL：含 ::jsonb 或 public.buff_sets → 当成 Buff 集导出，
+    // 走 import_buff 批量导入（而非直接执行 Postgres 语法，SQLite 跑不了）。
+    if sql_text.contains("::jsonb") || sql_text.contains("public.buff_sets") {
+        let n = crate::import_buff::import_from_sql(&conn, &sql_text)?;
+        println!("已按 Buff 集导出格式批量导入 {} 条", n);
+        return Ok(());
+    }
+
+    // 逐条执行（按分号切分；忽略纯注释/空段）
+    let mut executed = 0;
+    for chunk in split_sql_statements(&sql_text) {
+        let trimmed = chunk.trim();
+        if trimmed.is_empty() || trimmed.starts_with("--") || trimmed.starts_with("/*") {
+            continue;
+        }
+        match crate::sql_engine::run_sql_on(&user, trimmed, &conn) {
+            Ok(r) => {
+                executed += 1;
+                print_sql_line(&trimmed);
+                crate::sql_engine::print_sql_result(&r);
+            }
+            Err(e) => {
+                eprintln!("语句失败：{}\n  SQL: {}", e, trimmed);
+                return Ok(());
+            }
+        }
+    }
+    println!("（共执行 {} 条语句）", executed);
+    Ok(())
+}
+
+/// 简单按分号切分 SQL（把游标/引号内含分号保留；这里只处理单引号字符串内的分号）
+fn split_sql_statements(sql: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut in_single = false;
+    let mut chars = sql.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' if !in_single => {
+                in_single = true;
+                cur.push(c);
+            }
+            '\'' if in_single => {
+                // 判断是否转义（''）
+                if chars.peek() == Some(&'\'') {
+                    cur.push(c);
+                    if let Some(n) = chars.next() {
+                        cur.push(n);
+                    }
+                } else {
+                    in_single = false;
+                    cur.push(c);
+                }
+            }
+            ';' if !in_single => {
+                out.push(cur.clone());
+                cur.clear();
+            }
+            _ => cur.push(c),
+        }
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn print_sql_line(sql: &str) {
+    let one = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    println!("→ {}", one);
 }
 
 fn run_config(action: &ConfigAction) -> Result<()> {

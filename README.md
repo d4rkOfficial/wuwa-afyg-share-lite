@@ -154,7 +154,18 @@ lite announcement create 标题 内容
 lite cleanup                         # 手动清理过期工程（服务器每 5 分钟自动执行）
 lite wipe [--force]                  # 清空全部本地数据（仅本机 localhost；二次确认，--force 跳过）
 lite reset-templates [--tui|--web]   # 恢复默认 TUI 脚本 / Web 页面（覆盖用户修改）
+lite sql [--path <文件>] [--db <仓库>] # 直接对本机数据库执行 SQL（本机可用，管理员可写）
 ```
+
+### SQL 命令（`lite sql`）
+
+直接对本机 SQLite 数据库执行语句，方便紧急维护 / 批量导入：
+
+- `lite sql --path 脚本.sql [--db <仓库>]`：执行 SQL 文件（原生 SQLite 语法）
+- `lite sql --db <仓库>`：进入交互式输入缓冲区，多行粘贴 SQL，**空行结束执行**
+- 仅本机（localhost）可用，本机即 root_admin（管理员）可执行任意 SQL（`UPDATE`/`DELETE` 等）；非本机连接拒绝执行
+- **自动识别 Buff 导出格式**：SQL 文本含 `::jsonb` 或 `public.buff_sets`（即 `/api/buff-sets/export` 的导出）时，
+  自动走 Buff 集批量导入（等价于 TUI 的「SQL 导入 Buff 集」），无需手工转换 Postgres 语法
 
 ### 可定制界面（TUI 脚本 + Web 页面）
 
@@ -184,12 +195,13 @@ Web 页面（`index.html`）与 TUI 交互脚本（`tui-script.json`）**外置*
 }
 ```
 
-- `action.type`：`sql` / `http` / `command`
-  - `sql` 直接对项目 SQLite 数据库执行（只读打开），结果以表格打印
+- `action.type`：`sql` / `http` / `command` / `import-buff-sql`
+  - `sql` 直接对项目 SQLite 数据库执行（author 为 root_admin 时管理员可写，否则只读），结果以表格打印
   - `http` 通过当前连接调用服务器（`method` + `path` + 可选 `body`）
   - `command` 执行本机命令（仅限本机 localhost 连接）
+  - `import-buff-sql` 输入一个**导出格式 SQL 文件**（/api/buff-sets/export），批量导入 Buff 集
 - `{占位名}` 或显式 `params` 里的变量，会在动作执行前提示输入，留空则忽略该占位
-- `author` 若非 `root_admin`，动作交由当前登录用户身份执行
+- `author` 若非 `root_admin`，动作交由该身份执行；sql / import-buff-sql 写操作仅 root_admin 可用
 
 Buff 增益项（`--zone`）格式：`"zoneId=数值;ref=引用区;pct=比例;override"`，例如
 `--zone "atkPct=10;ref=totalAtk;pct=0.05;override"`；
