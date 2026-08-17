@@ -1,0 +1,24 @@
+[package]
+name = "wuwa-afyg-share-lite"
+version = "0.1.0"
+edition = "2021"
+description = "椰果工坊 SQLite 版 —— 仅 TUI/CLI 界面的《鸣潮》工程分享平台（HTTP API 与 wuwa-afyg-share 一致，无 AI 工具 / bilibili-toy 功能）"
+
+[dependencies]
+anyhow = "1"
+argon2 = "0.5"
+axum = "0.8"
+brotli = "6"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+dialoguer = "0.11"
+rand = "0.8"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+ureq = { version = "2", features = ["json"] }
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = 2
