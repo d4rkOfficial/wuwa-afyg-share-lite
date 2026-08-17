@@ -145,6 +145,12 @@ pub enum Command {
     },
     /// 手动清理过期工程（管理员）
     Cleanup,
+    /// 清空全部本地数据（仅本机 localhost 可用，需二次确认）
+    Wipe {
+        /// 跳过二次确认，直接清空
+        #[arg(long)]
+        force: bool,
+    },
     /// 写入示例数据（管理员）
     Demo,
     /// 启动交互式 TUI
@@ -420,6 +426,7 @@ pub fn run(cli: &Cli) -> Result<()> {
         Command::Announcement { action } => run_announcement(cli, action),
         Command::Catalog { action } => run_catalog(cli, action),
         Command::Cleanup => run_cleanup(cli),
+        Command::Wipe { force } => run_wipe(cli, *force),
         Command::Demo => run_demo(cli),
         Command::Tui => crate::tui::run(&make_client(cli)?),
         Command::Config { action } => run_config(action),
@@ -1458,6 +1465,45 @@ fn run_cleanup(cli: &Cli) -> Result<()> {
         "已清理 {} 个过期工程",
         v.get("deleted").and_then(|x| x.as_i64()).unwrap_or(0)
     );
+    Ok(())
+}
+
+/// 清空全部本地数据：仅本机（localhost）可用；--force 跳过二次确认
+fn run_wipe(cli: &Cli, force: bool) -> Result<()> {
+    let client = make_client(cli)?;
+    if !crate::client::is_loopback_url(&client.base) {
+        bail!(
+            "仅本机（localhost）可清空本地数据：当前服务器为 {}",
+            client.base
+        );
+    }
+    if !force {
+        let idx = Select::new()
+            .with_prompt("确认清空全部本地数据？此操作不可恢复（工程/账号/会话/Buff 集/快照/公告/授权/上游缓存全部删除）")
+            .items(&["取消", "确认清空"])
+            .default(0)
+            .interact()?;
+        if idx != 1 {
+            println!("已取消");
+            return Ok(());
+        }
+    }
+    let resp = client.post("/api/admin/wipe", json!({}))?;
+    let v = resp.ok_json()?;
+    let get = |k: &str| v.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+    println!("已清空全部本地数据：");
+    println!(
+        "  工程 {} ｜ 账号 {} ｜ 会话 {} ｜ Buff 集 {} ｜ 快照 {} ｜ 公告 {} ｜ 授权 {} ｜ 上游缓存 {}",
+        get("projects"),
+        get("profiles"),
+        get("sessions"),
+        get("buffSets"),
+        get("snapshots"),
+        get("announcements"),
+        get("grants"),
+        get("meta")
+    );
+    println!("下次本机访问（CLI/TUI/Web）将自动重建 root_admin 账号");
     Ok(())
 }
 

@@ -1124,6 +1124,31 @@ pub async fn admin_cleanup(State(state): State<AppState>, headers: HeaderMap) ->
     }
 }
 
+/// 清空全部本地数据：仅本机（回环地址）可用，无条件删除所有表（工程/账号/会话/
+/// Buff 集/快照/公告/授权/上游缓存）。root_admin 在下次本机访问时自动重建。
+pub async fn admin_wipe(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if !is_local_root(&headers) {
+        return err_json(StatusCode::FORBIDDEN, "仅本机（localhost）可清空本地数据");
+    }
+    let conn = state.db.lock().unwrap();
+    match repo::wipe_all(&conn) {
+        Ok(st) => json_res(
+            StatusCode::OK,
+            json!({
+                "projects": st.projects,
+                "sessions": st.sessions,
+                "grants": st.grants,
+                "snapshots": st.snapshots,
+                "announcements": st.announcements,
+                "buffSets": st.buff_sets,
+                "profiles": st.profiles,
+                "meta": st.meta,
+            }),
+        ),
+        Err(e) => err_json(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
 pub async fn admin_demo(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if let Err(r) = auth_admin(&state, &headers) {
         return r;

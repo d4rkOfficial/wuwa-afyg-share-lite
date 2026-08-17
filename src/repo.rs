@@ -862,3 +862,31 @@ pub fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
     )?;
     Ok(())
 }
+
+// ── 清空全部数据（仅本机 localhost；先删引用方再删父表）──
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct WipeStats {
+    pub projects: i64,
+    pub sessions: i64,
+    pub grants: i64,
+    pub snapshots: i64,
+    pub announcements: i64,
+    pub buff_sets: i64,
+    pub profiles: i64,
+    pub meta: i64,
+}
+
+pub fn wipe_all(conn: &Connection) -> Result<WipeStats> {
+    let del = |sql: &str| -> Result<i64> { Ok(conn.execute(sql, [])? as i64) };
+    Ok(WipeStats {
+        projects: del("DELETE FROM projects")?,
+        sessions: del("DELETE FROM sessions")?,
+        grants: del("DELETE FROM admin_grants")?,
+        snapshots: del("DELETE FROM buff_set_snapshot")?,
+        announcements: del("DELETE FROM announcements")?,
+        buff_sets: del("DELETE FROM buff_sets")?,
+        profiles: del("DELETE FROM profiles")?,
+        meta: del("DELETE FROM meta")?,
+    })
+}

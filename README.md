@@ -152,6 +152,7 @@ lite buff upsert character 今汐 新增益 --zone atkPct=12 --scope self   # �
 lite buff delete character 今汐 新增益
 lite announcement create 标题 内容
 lite cleanup                         # 手动清理过期工程（服务器每 5 分钟自动执行）
+lite wipe [--force]                  # 清空全部本地数据（仅本机 localhost；二次确认，--force 跳过）
 ```
 
 Buff 增益项（`--zone`）格式：`"zoneId=数值;ref=引用区;pct=比例;override"`，例如

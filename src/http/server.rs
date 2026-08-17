@@ -140,6 +140,7 @@ pub fn build_router(state: AppState) -> Router {
             patch(handlers::admin_announcement_update).delete(handlers::admin_announcement_delete),
         )
         .route("/api/admin/cleanup", post(handlers::admin_cleanup))
+        .route("/api/admin/wipe", post(handlers::admin_wipe))
         .route("/api/admin/demo", post(handlers::admin_demo))
         .fallback(handlers::not_found)
         // 本地免登录：回环地址客户端自动标记为 root_admin（非回环请求会移除该标记，防伪造）
